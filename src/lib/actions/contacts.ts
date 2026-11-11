@@ -1,0 +1,55 @@
+"use server";
+
+import { eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { contacts, getDb } from "@/db";
+
+function readContactFields(formData: FormData) {
+  const name = String(formData.get("name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim() || null;
+  const phone = String(formData.get("phone") ?? "").trim() || null;
+  const role = String(formData.get("role") ?? "").trim() || null;
+  const notes = String(formData.get("notes") ?? "").trim() || null;
+  const organizationRaw = String(formData.get("organizationId") ?? "").trim();
+  const organizationId = organizationRaw ? Number(organizationRaw) : null;
+
+  if (!name) throw new Error("Name is required");
+
+  return {
+    name,
+    email,
+    phone,
+    role,
+    notes,
+    organizationId:
+      organizationId && Number.isFinite(organizationId) ? organizationId : null,
+  };
+}
+
+export async function createContact(formData: FormData) {
+  const fields = readContactFields(formData);
+  const db = await getDb();
+  const [row] = await db.insert(contacts).values(fields).returning();
+  revalidatePath("/contacts");
+  redirect(`/contacts/${row.id}`);
+}
+
+export async function updateContact(id: number, formData: FormData) {
+  const fields = readContactFields(formData);
+  const db = await getDb();
+  await db
+    .update(contacts)
+    .set({ ...fields, updatedAt: new Date() })
+    .where(eq(contacts.id, id));
+  revalidatePath("/contacts");
+  revalidatePath(`/contacts/${id}`);
+  redirect(`/contacts/${id}`);
+}
+
+export async function deleteContact(id: number) {
+  const db = await getDb();
+  await db.delete(contacts).where(eq(contacts.id, id));
+  revalidatePath("/contacts");
+  redirect("/contacts");
+}
