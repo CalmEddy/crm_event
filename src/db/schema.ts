@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   date,
   integer,
   pgEnum,
@@ -47,12 +48,97 @@ export const inboundEmailStatusEnum = pgEnum("inbound_email_status", [
   "duplicate",
 ]);
 
+export const notificationKindEnum = pgEnum("notification_kind", [
+  "assignment",
+  "record_change",
+  "task_due",
+]);
+
 export const entityTypeEnum = pgEnum("entity_type", [
   "contact",
   "organization",
   "event",
   "task",
 ]);
+
+export const users = pgTable(
+  "users",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [uniqueIndex("users_email_idx").on(table.email)],
+);
+
+export const eventAssignees = pgTable(
+  "event_assignees",
+  {
+    id: serial("id").primaryKey(),
+    eventId: integer("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("event_assignees_event_user_idx").on(
+      table.eventId,
+      table.userId,
+    ),
+  ],
+);
+
+export const taskAssignees = pgTable(
+  "task_assignees",
+  {
+    id: serial("id").primaryKey(),
+    taskId: integer("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("task_assignees_task_user_idx").on(table.taskId, table.userId),
+  ],
+);
+
+export const notificationLog = pgTable(
+  "notification_log",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: notificationKindEnum("kind").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    dedupeKey: text("dedupe_key").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    error: text("error"),
+  },
+  (table) => [
+    uniqueIndex("notification_log_dedupe_key_idx").on(table.dedupeKey),
+  ],
+);
 
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
@@ -287,6 +373,41 @@ export const entityLinks = pgTable(
   ],
 );
 
+export const usersRelations = relations(users, ({ many }) => ({
+  eventAssignments: many(eventAssignees),
+  taskAssignments: many(taskAssignees),
+  notifications: many(notificationLog),
+}));
+
+export const eventAssigneesRelations = relations(eventAssignees, ({ one }) => ({
+  event: one(events, {
+    fields: [eventAssignees.eventId],
+    references: [events.id],
+  }),
+  user: one(users, {
+    fields: [eventAssignees.userId],
+    references: [users.id],
+  }),
+}));
+
+export const taskAssigneesRelations = relations(taskAssignees, ({ one }) => ({
+  task: one(tasks, {
+    fields: [taskAssignees.taskId],
+    references: [tasks.id],
+  }),
+  user: one(users, {
+    fields: [taskAssignees.userId],
+    references: [users.id],
+  }),
+}));
+
+export const notificationLogRelations = relations(notificationLog, ({ one }) => ({
+  user: one(users, {
+    fields: [notificationLog.userId],
+    references: [users.id],
+  }),
+}));
+
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   contacts: many(contacts),
   events: many(events),
@@ -310,6 +431,7 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
   links: many(eventContacts),
   tasks: many(tasks),
   taskGroupApplications: many(taskGroupApplications),
+  assignees: many(eventAssignees),
 }));
 
 export const eventContactsRelations = relations(eventContacts, ({ one }) => ({
@@ -355,7 +477,7 @@ export const taskGroupApplicationsRelations = relations(
   }),
 );
 
-export const tasksRelations = relations(tasks, ({ one }) => ({
+export const tasksRelations = relations(tasks, ({ one, many }) => ({
   event: one(events, {
     fields: [tasks.eventId],
     references: [events.id],
@@ -372,6 +494,7 @@ export const tasksRelations = relations(tasks, ({ one }) => ({
     fields: [tasks.taskTemplateId],
     references: [taskTemplates.id],
   }),
+  assignees: many(taskAssignees),
 }));
 
 export const inboundEmailsRelations = relations(inboundEmails, ({ one }) => ({
@@ -403,6 +526,10 @@ export type Task = typeof tasks.$inferSelect;
 export type TaskGroup = typeof taskGroups.$inferSelect;
 export type TaskTemplate = typeof taskTemplates.$inferSelect;
 export type InboundEmail = typeof inboundEmails.$inferSelect;
+export type User = typeof users.$inferSelect;
+export type EventAssignee = typeof eventAssignees.$inferSelect;
+export type TaskAssignee = typeof taskAssignees.$inferSelect;
+export type NotificationLog = typeof notificationLog.$inferSelect;
 export type Note = typeof notes.$inferSelect;
 export type NoteLink = typeof noteLinks.$inferSelect;
 export type EntityLink = typeof entityLinks.$inferSelect;

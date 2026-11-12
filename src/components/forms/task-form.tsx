@@ -1,9 +1,10 @@
+import { AssigneePicker } from "@/components/forms/assignee-picker";
 import {
   Field,
   SubmitButton,
   inputClassName,
 } from "@/components/ui";
-import type { Contact, Event, Task } from "@/db";
+import type { Contact, Event, Task, User } from "@/db";
 import {
   TASK_KINDS,
   TASK_STATUSES,
@@ -16,12 +17,16 @@ export function TaskForm({
   task,
   events,
   contacts,
+  users = [],
+  assigneeIds = [],
   defaults,
 }: {
   action: (formData: FormData) => Promise<void>;
   task?: Task;
   events: Event[];
   contacts: Contact[];
+  users?: User[];
+  assigneeIds?: number[];
   defaults?: {
     eventId?: number | null;
     contactId?: number | null;
@@ -126,6 +131,7 @@ export function TaskForm({
           defaultValue={task?.notes ?? ""}
         />
       </Field>
+      <AssigneePicker users={users} selectedIds={assigneeIds} />
       <SubmitButton>{task ? "Save task" : "Create task"}</SubmitButton>
     </form>
   );

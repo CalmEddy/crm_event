@@ -1,9 +1,10 @@
+import { AssigneePicker } from "@/components/forms/assignee-picker";
 import {
   Field,
   SubmitButton,
   inputClassName,
 } from "@/components/ui";
-import type { Event, Organization } from "@/db";
+import type { Event, Organization, User } from "@/db";
 import { EVENT_STATUSES, labelize } from "@/lib/constants";
 import { toDateTimeLocalValue } from "@/lib/format";
 
@@ -11,10 +12,14 @@ export function EventForm({
   action,
   event,
   organizations,
+  users = [],
+  assigneeIds = [],
 }: {
   action: (formData: FormData) => Promise<void>;
   event?: Event;
   organizations: Organization[];
+  users?: User[];
+  assigneeIds?: number[];
 }) {
   return (
     <form
@@ -87,6 +92,7 @@ export function EventForm({
           defaultValue={event?.notes ?? ""}
         />
       </Field>
+      <AssigneePicker users={users} selectedIds={assigneeIds} />
       <SubmitButton>{event ? "Save event" : "Create event"}</SubmitButton>
     </form>
   );

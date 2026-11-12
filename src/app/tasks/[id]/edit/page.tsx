@@ -4,7 +4,9 @@ import { connection } from "next/server";
 import { TaskForm } from "@/components/forms/task-form";
 import { PageHeader, SubmitButton } from "@/components/ui";
 import { contacts, events, getDb, tasks } from "@/db";
+import { listTaskAssigneeIds } from "@/lib/assignees";
 import { deleteTask, updateTask } from "@/lib/actions/tasks";
+import { listActiveUsers } from "@/lib/current-user";
 
 export default async function EditTaskPage({
   params,
@@ -17,8 +19,12 @@ export default async function EditTaskPage({
   const db = await getDb();
   const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
   if (!task) notFound();
-  const eventRows = await db.select().from(events).orderBy(asc(events.startsAt));
-  const contactRows = await db.select().from(contacts).orderBy(asc(contacts.name));
+  const [eventRows, contactRows, activeUsers, assigneeIds] = await Promise.all([
+    db.select().from(events).orderBy(asc(events.startsAt)),
+    db.select().from(contacts).orderBy(asc(contacts.name)),
+    listActiveUsers(),
+    listTaskAssigneeIds(id),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -34,6 +40,8 @@ export default async function EditTaskPage({
         task={task}
         events={eventRows}
         contacts={contactRows}
+        users={activeUsers}
+        assigneeIds={assigneeIds}
         action={updateTask.bind(null, id)}
       />
     </div>

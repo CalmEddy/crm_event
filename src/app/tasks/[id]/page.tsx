@@ -13,6 +13,7 @@ import {
   inputClassName,
 } from "@/components/ui";
 import { contacts, events, getDb, tasks } from "@/db";
+import { usersByIds, listTaskAssigneeIds } from "@/lib/assignees";
 import { deleteTask, updateTaskStatus } from "@/lib/actions/tasks";
 import { TASK_STATUSES, labelize } from "@/lib/constants";
 import {
@@ -41,11 +42,13 @@ export default async function TaskDetailPage({
     ? await db.select().from(contacts).where(eq(contacts.id, task.contactId))
     : [null];
 
-  const [options, noteRows, related] = await Promise.all([
+  const [options, noteRows, related, assigneeIds] = await Promise.all([
     loadEntityOptions(),
     loadNotesForEntity({ type: "task", id }),
     loadRelatedLinksForEntity({ type: "task", id }),
+    listTaskAssigneeIds(id),
   ]);
+  const assigneeUsers = await usersByIds(assigneeIds);
 
   return (
     <div className="space-y-10">
@@ -91,6 +94,12 @@ export default async function TaskDetailPage({
           ) : (
             "—"
           )}
+        </p>
+        <p className="text-sm text-[color:var(--muted)]">
+          Assignees:{" "}
+          {assigneeUsers.length > 0
+            ? assigneeUsers.map((user) => user.name).join(", ")
+            : "None — edit the task to assign staff."}
         </p>
         <p className="whitespace-pre-wrap text-sm text-[color:var(--muted)]">
           {task.notes || "No profile notes on this task."}
