@@ -41,6 +41,12 @@ export const taskStatusEnum = pgEnum("task_status", [
   "skipped",
 ]);
 
+export const inboundEmailStatusEnum = pgEnum("inbound_email_status", [
+  "created",
+  "failed",
+  "duplicate",
+]);
+
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -187,6 +193,35 @@ export const tasks = pgTable("tasks", {
     .defaultNow(),
 });
 
+export const inboundEmails = pgTable(
+  "inbound_emails",
+  {
+    id: serial("id").primaryKey(),
+    providerMessageId: text("provider_message_id").notNull(),
+    subject: text("subject"),
+    fromAddress: text("from_address"),
+    status: inboundEmailStatusEnum("status").notNull(),
+    error: text("error"),
+    contactId: integer("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    eventId: integer("event_id").references(() => events.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("inbound_emails_provider_message_id_idx").on(
+      table.providerMessageId,
+    ),
+  ],
+);
+
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   contacts: many(contacts),
   events: many(events),
@@ -274,9 +309,21 @@ export const tasksRelations = relations(tasks, ({ one }) => ({
   }),
 }));
 
+export const inboundEmailsRelations = relations(inboundEmails, ({ one }) => ({
+  contact: one(contacts, {
+    fields: [inboundEmails.contactId],
+    references: [contacts.id],
+  }),
+  event: one(events, {
+    fields: [inboundEmails.eventId],
+    references: [events.id],
+  }),
+}));
+
 export type Organization = typeof organizations.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type TaskGroup = typeof taskGroups.$inferSelect;
 export type TaskTemplate = typeof taskTemplates.$inferSelect;
+export type InboundEmail = typeof inboundEmails.$inferSelect;
