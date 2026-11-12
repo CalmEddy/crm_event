@@ -4,12 +4,16 @@ import { TaskForm } from "@/components/forms/task-form";
 import { PageHeader } from "@/components/ui";
 import { contacts, events, getDb } from "@/db";
 import { createTask } from "@/lib/actions/tasks";
+import { listActiveUsers } from "@/lib/current-user";
 
 export default async function NewTaskPage() {
   await connection();
   const db = await getDb();
-  const eventRows = await db.select().from(events).orderBy(asc(events.startsAt));
-  const contactRows = await db.select().from(contacts).orderBy(asc(contacts.name));
+  const [eventRows, contactRows, activeUsers] = await Promise.all([
+    db.select().from(events).orderBy(asc(events.startsAt)),
+    db.select().from(contacts).orderBy(asc(contacts.name)),
+    listActiveUsers(),
+  ]);
 
   return (
     <div>
@@ -18,6 +22,7 @@ export default async function NewTaskPage() {
         action={createTask}
         events={eventRows}
         contacts={contactRows}
+        users={activeUsers}
       />
     </div>
   );

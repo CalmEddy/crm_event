@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { connection } from "next/server";
 import {
   Badge,
@@ -17,10 +17,13 @@ import {
   events,
   getDb,
   organizations,
+  taskAssignees,
   taskGroupApplications,
   taskGroups,
   tasks,
+  users,
 } from "@/db";
+import { listEventAssigneeUsers } from "@/lib/assignees";
 import {
   addEventLink,
   deleteEvent,
@@ -96,6 +99,26 @@ export default async function EventDetailPage({
     .select()
     .from(organizations)
     .orderBy(asc(organizations.name));
+  const assigneeUsers = await listEventAssigneeUsers(id);
+
+  const taskIds = eventTasks.map((task) => task.id);
+  const taskAssigneeRows =
+    taskIds.length > 0
+      ? await db
+          .select({
+            taskId: taskAssignees.taskId,
+            userName: users.name,
+          })
+          .from(taskAssignees)
+          .innerJoin(users, eq(taskAssignees.userId, users.id))
+          .where(inArray(taskAssignees.taskId, taskIds))
+      : [];
+  const assigneesByTask = new Map<number, string[]>();
+  for (const row of taskAssigneeRows) {
+    const list = assigneesByTask.get(row.taskId) ?? [];
+    list.push(row.userName);
+    assigneesByTask.set(row.taskId, list);
+  }
 
   return (
     <div className="space-y-10">
@@ -123,6 +146,12 @@ export default async function EventDetailPage({
             </Link>
           ) : null}
         </div>
+        <p className="text-sm text-[color:var(--muted)]">
+          Assignees:{" "}
+          {assigneeUsers.length > 0
+            ? assigneeUsers.map((user) => user.name).join(", ")
+            : "None — edit the event to assign staff."}
+        </p>
         <p className="whitespace-pre-wrap text-sm text-[color:var(--muted)]">
           {event.notes || "No notes."}
         </p>
@@ -247,6 +276,9 @@ export default async function EventDetailPage({
                     <div className="font-medium">{task.title}</div>
                     <div className="text-sm text-[color:var(--muted)]">
                       {formatDate(task.dueOn)} · {labelize(task.kind)}
+                      {assigneesByTask.get(task.id)?.length
+                        ? ` · ${assigneesByTask.get(task.id)!.join(", ")}`
+                        : ""}
                     </div>
                   </div>
                   <form

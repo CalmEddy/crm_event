@@ -11,6 +11,7 @@ import {
   tasks,
   taskTemplates,
 } from "@/db";
+import { copyEventAssigneesToTasks } from "@/lib/assignees";
 import { TASK_KINDS, type TaskKind } from "@/lib/constants";
 import {
   dueOnFromEventDate,
@@ -184,16 +185,23 @@ export async function applyTaskGroupToEvent(eventId: number, formData: FormData)
   );
 
   if (toCreate.length > 0) {
-    await db.insert(tasks).values(
-      toCreate.map((template) => ({
-        title: template.title,
-        kind: template.kind,
-        dueOn: dueOnFromEventDate(event.startsAt, template.offsetDays),
-        status: "todo" as const,
-        eventId,
-        taskGroupId,
-        taskTemplateId: template.id,
-      })),
+    const created = await db
+      .insert(tasks)
+      .values(
+        toCreate.map((template) => ({
+          title: template.title,
+          kind: template.kind,
+          dueOn: dueOnFromEventDate(event.startsAt, template.offsetDays),
+          status: "todo" as const,
+          eventId,
+          taskGroupId,
+          taskTemplateId: template.id,
+        })),
+      )
+      .returning();
+    await copyEventAssigneesToTasks(
+      eventId,
+      created.map((task) => task.id),
     );
   }
 

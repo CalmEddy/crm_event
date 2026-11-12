@@ -8,7 +8,8 @@ Comedy booking CRM for contacts, organizations, events, tasks, and **relative ta
 - Postgres + Drizzle ORM
 - SQL migrations in `migrations/`
 - Server Actions for CRUD
-- Single-agency v1 (no multi-tenant auth)
+- Single-agency staff users (cookie “Act as” picker — not a security boundary)
+- Outbound assignment / change / due-task emails via Resend
 
 Locally, if `DATABASE_URL` is unset, the app uses an on-disk [PGlite](https://pglite.dev/) database under `.data/pglite` so you can develop without Postgres.
 
@@ -22,6 +23,8 @@ Locally, if `DATABASE_URL` is unset, the app uses an on-disk [PGlite](https://pg
 | Event links | contact and/or org with a role |
 | Tasks | kinds: travel, payment, call, email, follow_up, other · statuses: todo / doing / done / skipped |
 | Task groups + templates | reusable packs; each template has `offsetDays` relative to the event start date |
+| Users (staff) | name + email; assignable to events and tasks; Resend notifications |
+| Event / task assignees | many-to-many staff links; applying a task group copies event assignees onto new tasks |
 
 ### Relative task application
 
@@ -65,8 +68,9 @@ Published Cursor apps that declare a database get `DATABASE_URL` injected automa
 
 - Laugh Track Lounge (club) + Midwest Mirth Agency
 - Contacts: Dana Ortiz (buyer), Jules Park (comic), Sam Rivera (travel)
-- Event: Jules Park · Friday Late (~3 weeks out)
-- Task group **Standard booking**: −14 call, +2 email, +182 postcard (applied to the sample event)
+- Staff users: Alex Chen (booker), Morgan Blake (travel), Riley Quinn
+- Event: Jules Park · Friday Late (~3 weeks out), assigned to Alex + Morgan
+- Task group **Standard booking**: −14 call, +2 email, +182 postcard (applied to the sample event; tasks assigned to Alex + Morgan)
 
 ## Scripts
 
@@ -86,6 +90,35 @@ Published Cursor apps that declare a database get `DATABASE_URL` injected automa
 - **Contacts / Organizations** — list + detail
 - **Tasks** — filterable list
 - **Task groups** — editor with friendly offset controls
+- **Users** — staff directory; use **Act as** in the nav to set the current user cookie
+
+## Staff notifications (Resend outbound)
+
+Assignees receive email when they are newly assigned, when an assigned event/task changes (or is deleted), and via a daily due-task digest.
+
+Set:
+
+| Variable | Purpose |
+| --- | --- |
+| `RESEND_API_KEY` | Same key used for inbound body fetch; also sends outbound mail |
+| `RESEND_FROM_EMAIL` | Verified sender, e.g. `Greenroom <bookings@yourdomain.com>` |
+| `APP_BASE_URL` | Absolute links in emails (default `http://localhost:3000`) |
+| `CRON_SECRET` | Protects the due-task cron route |
+
+If Resend outbound env is missing, mutations still succeed and rows are written to `notification_log` with a skip reason (local-friendly).
+
+### Due-task digest cron
+
+Call once per day (hosting scheduler / external cron):
+
+```bash
+curl -X POST "https://<your-greenroom-host>/api/cron/due-tasks" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Open tasks (`todo` / `doing`) with `due_on <= today` are grouped per assignee. One digest per user per calendar day (`dedupe_key` prevents repeats).
+
+The **Act as** picker is for attribution (skip self-notify) and “Mine” task filters — it is not login security.
 
 ## Email event intake (Resend Inbound)
 
