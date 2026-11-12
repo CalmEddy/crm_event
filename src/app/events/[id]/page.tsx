@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { asc, eq, inArray } from "drizzle-orm";
 import { connection } from "next/server";
+import { NotesPanel } from "@/components/notes-panel";
+import { RelatedLinksPanel } from "@/components/related-links-panel";
 import {
   Badge,
   ButtonLink,
@@ -39,6 +41,11 @@ import {
   TASK_STATUSES,
   labelize,
 } from "@/lib/constants";
+import {
+  loadEntityOptions,
+  loadNotesForEntity,
+  loadRelatedLinksForEntity,
+} from "@/lib/entities";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { formatOffsetLabel } from "@/lib/offsets";
 
@@ -120,6 +127,12 @@ export default async function EventDetailPage({
     assigneesByTask.set(row.taskId, list);
   }
 
+  const [options, noteRows, related] = await Promise.all([
+    loadEntityOptions(),
+    loadNotesForEntity({ type: "event", id }),
+    loadRelatedLinksForEntity({ type: "event", id }),
+  ]);
+
   return (
     <div className="space-y-10">
       <PageHeader
@@ -127,6 +140,7 @@ export default async function EventDetailPage({
         description={`${formatDateTime(event.startsAt)} · ${event.venue || event.location || "Venue TBD"}`}
         actions={
           <>
+            <ButtonLink href={`/tasks/new?eventId=${id}`}>Add task</ButtonLink>
             <ButtonLink href={`/events/${id}/edit`} variant="secondary">
               Edit
             </ButtonLink>
@@ -273,7 +287,14 @@ export default async function EventDetailPage({
                   className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
-                    <div className="font-medium">{task.title}</div>
+                    <div className="font-medium">
+                      <Link
+                        href={`/tasks/${task.id}`}
+                        className="text-[color:var(--accent)]"
+                      >
+                        {task.title}
+                      </Link>
+                    </div>
                     <div className="text-sm text-[color:var(--muted)]">
                       {formatDate(task.dueOn)} · {labelize(task.kind)}
                       {assigneesByTask.get(task.id)?.length
@@ -347,6 +368,20 @@ export default async function EventDetailPage({
           </p>
         ) : null}
       </Section>
+
+      <NotesPanel
+        entityType="event"
+        entityId={id}
+        notes={noteRows}
+        options={options}
+      />
+
+      <RelatedLinksPanel
+        entityType="event"
+        entityId={id}
+        links={related}
+        options={options}
+      />
     </div>
   );
 }

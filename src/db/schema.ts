@@ -54,6 +54,13 @@ export const notificationKindEnum = pgEnum("notification_kind", [
   "task_due",
 ]);
 
+export const entityTypeEnum = pgEnum("entity_type", [
+  "contact",
+  "organization",
+  "event",
+  "task",
+]);
+
 export const users = pgTable(
   "users",
   {
@@ -308,6 +315,64 @@ export const inboundEmails = pgTable(
   ],
 );
 
+export const notes = pgTable("notes", {
+  id: serial("id").primaryKey(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const noteLinks = pgTable(
+  "note_links",
+  {
+    id: serial("id").primaryKey(),
+    noteId: integer("note_id")
+      .notNull()
+      .references(() => notes.id, { onDelete: "cascade" }),
+    entityType: entityTypeEnum("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("note_links_note_entity_idx").on(
+      table.noteId,
+      table.entityType,
+      table.entityId,
+    ),
+  ],
+);
+
+export const entityLinks = pgTable(
+  "entity_links",
+  {
+    id: serial("id").primaryKey(),
+    leftType: entityTypeEnum("left_type").notNull(),
+    leftId: integer("left_id").notNull(),
+    rightType: entityTypeEnum("right_type").notNull(),
+    rightId: integer("right_id").notNull(),
+    role: text("role").notNull().default("related"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("entity_links_pair_role_idx").on(
+      table.leftType,
+      table.leftId,
+      table.rightType,
+      table.rightId,
+      table.role,
+    ),
+  ],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   eventAssignments: many(eventAssignees),
   taskAssignments: many(taskAssignees),
@@ -443,6 +508,17 @@ export const inboundEmailsRelations = relations(inboundEmails, ({ one }) => ({
   }),
 }));
 
+export const notesRelations = relations(notes, ({ many }) => ({
+  links: many(noteLinks),
+}));
+
+export const noteLinksRelations = relations(noteLinks, ({ one }) => ({
+  note: one(notes, {
+    fields: [noteLinks.noteId],
+    references: [notes.id],
+  }),
+}));
+
 export type Organization = typeof organizations.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Event = typeof events.$inferSelect;
@@ -454,3 +530,7 @@ export type User = typeof users.$inferSelect;
 export type EventAssignee = typeof eventAssignees.$inferSelect;
 export type TaskAssignee = typeof taskAssignees.$inferSelect;
 export type NotificationLog = typeof notificationLog.$inferSelect;
+export type Note = typeof notes.$inferSelect;
+export type NoteLink = typeof noteLinks.$inferSelect;
+export type EntityLink = typeof entityLinks.$inferSelect;
+export type EntityType = (typeof entityTypeEnum.enumValues)[number];

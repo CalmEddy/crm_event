@@ -65,7 +65,7 @@ export function eventDeletedMessage(event: EventSummary) {
 }
 
 export function taskAssignedMessage(task: TaskSummary) {
-  const url = `${appBaseUrl()}/tasks/${task.id}/edit`;
+  const url = `${appBaseUrl()}/tasks/${task.id}`;
   return {
     subject: `Assigned to task: ${task.title}`,
     body: [
@@ -85,7 +85,7 @@ export function taskAssignedMessage(task: TaskSummary) {
 }
 
 export function taskChangedMessage(task: TaskSummary, action: string) {
-  const url = `${appBaseUrl()}/tasks/${task.id}/edit`;
+  const url = `${appBaseUrl()}/tasks/${task.id}`;
   return {
     subject: `Task ${action}: ${task.title}`,
     body: [

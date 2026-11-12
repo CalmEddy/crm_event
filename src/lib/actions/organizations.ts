@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb, organizations } from "@/db";
 import { ORGANIZATION_TYPES, type OrganizationType } from "@/lib/constants";
+import { deletePolymorphicRefsForEntity } from "@/lib/entities";
 
 function readOrgFields(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
@@ -40,8 +41,10 @@ export async function updateOrganization(id: number, formData: FormData) {
 }
 
 export async function deleteOrganization(id: number) {
+  await deletePolymorphicRefsForEntity({ type: "organization", id });
   const db = await getDb();
   await db.delete(organizations).where(eq(organizations.id, id));
   revalidatePath("/organizations");
+  revalidatePath("/notes");
   redirect("/organizations");
 }

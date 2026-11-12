@@ -211,9 +211,12 @@ export default async function TasksPage({
             ) : (
               "—"
             ),
-            <Link key={`${task.id}-edit`} href={`/tasks/${task.id}/edit`}>
-              Edit
-            </Link>,
+            <span key={`${task.id}-actions`} className="flex gap-3">
+              <Link href={`/tasks/${task.id}`} className="text-[color:var(--accent)]">
+                Open
+              </Link>
+              <Link href={`/tasks/${task.id}/edit`}>Edit</Link>
+            </span>,
           ])}
         />
       )}

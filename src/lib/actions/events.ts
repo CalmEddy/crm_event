@@ -11,6 +11,7 @@ import {
 } from "@/lib/assignees";
 import { EVENT_STATUSES, type EventStatus } from "@/lib/constants";
 import { getCurrentUserId } from "@/lib/current-user";
+import { deletePolymorphicRefsForEntity } from "@/lib/entities";
 import {
   eventAssignedMessage,
   eventChangedMessage,
@@ -32,7 +33,12 @@ function readEventFields(formData: FormData) {
   if (!startsAtRaw) throw new Error("Start date/time is required");
   if (!EVENT_STATUSES.includes(status)) throw new Error("Invalid status");
 
-  const startsAt = new Date(startsAtRaw);
+  // datetime-local yields "YYYY-MM-DDTHH:mm" (no timezone). Normalize so Node
+  // and hosted runtimes parse consistently.
+  const normalizedStartsAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(startsAtRaw)
+    ? `${startsAtRaw}:00`
+    : startsAtRaw;
+  const startsAt = new Date(normalizedStartsAt);
   if (Number.isNaN(startsAt.getTime())) throw new Error("Invalid start date");
 
   return {
@@ -152,6 +158,7 @@ export async function updateEvent(id: number, formData: FormData) {
 }
 
 export async function deleteEvent(id: number) {
+  await deletePolymorphicRefsForEntity({ type: "event", id });
   const db = await getDb();
   const [existing] = await db.select().from(events).where(eq(events.id, id));
   const assigneeIds = existing ? await listEventAssigneeIds(id) : [];
@@ -164,6 +171,7 @@ export async function deleteEvent(id: number) {
     });
   }
   revalidatePath("/events");
+  revalidatePath("/notes");
   revalidatePath("/");
   redirect("/events");
 }

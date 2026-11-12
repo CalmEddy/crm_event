@@ -19,6 +19,7 @@ export function TaskForm({
   contacts,
   users = [],
   assigneeIds = [],
+  defaults,
 }: {
   action: (formData: FormData) => Promise<void>;
   task?: Task;
@@ -26,6 +27,12 @@ export function TaskForm({
   contacts: Contact[];
   users?: User[];
   assigneeIds?: number[];
+  defaults?: {
+    eventId?: number | null;
+    contactId?: number | null;
+    title?: string;
+    dueOn?: string;
+  };
 }) {
   return (
     <form
@@ -37,7 +44,7 @@ export function TaskForm({
           className={inputClassName}
           name="title"
           required
-          defaultValue={task?.title ?? ""}
+          defaultValue={task?.title ?? defaults?.title ?? ""}
         />
       </Field>
       <Field label="Kind">
@@ -72,14 +79,23 @@ export function TaskForm({
           name="dueOn"
           type="date"
           required
-          defaultValue={toDateInputValue(task?.dueOn)}
+          defaultValue={
+            toDateInputValue(task?.dueOn) || defaults?.dueOn || ""
+          }
         />
       </Field>
-      <Field label="Event">
+      <Field
+        label="Event"
+        hint="Optional. Individual tasks do not require an event."
+      >
         <select
           className={inputClassName}
           name="eventId"
-          defaultValue={task?.eventId?.toString() ?? ""}
+          defaultValue={
+            task?.eventId?.toString() ??
+            defaults?.eventId?.toString() ??
+            ""
+          }
         >
           <option value="">None</option>
           {events.map((event) => (
@@ -93,7 +109,11 @@ export function TaskForm({
         <select
           className={inputClassName}
           name="contactId"
-          defaultValue={task?.contactId?.toString() ?? ""}
+          defaultValue={
+            task?.contactId?.toString() ??
+            defaults?.contactId?.toString() ??
+            ""
+          }
         >
           <option value="">None</option>
           {contacts.map((contact) => (
@@ -103,7 +123,7 @@ export function TaskForm({
           ))}
         </select>
       </Field>
-      <Field label="Notes">
+      <Field label="Profile notes">
         <textarea
           className={inputClassName}
           name="notes"

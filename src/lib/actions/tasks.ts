@@ -16,6 +16,7 @@ import {
   type TaskStatus,
 } from "@/lib/constants";
 import { getCurrentUserId } from "@/lib/current-user";
+import { deletePolymorphicRefsForEntity } from "@/lib/entities";
 import {
   taskAssignedMessage,
   taskChangedMessage,
@@ -50,10 +51,11 @@ function readTaskFields(formData: FormData) {
   };
 }
 
-function revalidateTaskPaths(eventId?: number | null) {
+function revalidateTaskPaths(eventId?: number | null, taskId?: number | null) {
   revalidatePath("/tasks");
   revalidatePath("/");
   if (eventId) revalidatePath(`/events/${eventId}`);
+  if (taskId) revalidatePath(`/tasks/${taskId}`);
 }
 
 async function eventTitleFor(eventId: number | null) {
@@ -140,8 +142,9 @@ export async function createTask(formData: FormData) {
     addedIds: added,
     action: "created",
   });
-  revalidateTaskPaths(row.eventId);
-  redirect("/tasks");
+  revalidateTaskPaths(row.eventId, row.id);
+  if (row.contactId) revalidatePath(`/contacts/${row.contactId}`);
+  redirect(`/tasks/${row.id}`);
 }
 
 export async function updateTask(id: number, formData: FormData) {
@@ -163,8 +166,9 @@ export async function updateTask(id: number, formData: FormData) {
       action: "updated",
     });
   }
-  revalidateTaskPaths(row?.eventId);
-  redirect("/tasks");
+  revalidateTaskPaths(row?.eventId, id);
+  if (row?.contactId) revalidatePath(`/contacts/${row.contactId}`);
+  redirect(`/tasks/${id}`);
 }
 
 export async function updateTaskStatus(id: number, formData: FormData) {
@@ -184,10 +188,11 @@ export async function updateTaskStatus(id: number, formData: FormData) {
       action: "updated",
     });
   }
-  revalidateTaskPaths(row?.eventId);
+  revalidateTaskPaths(row?.eventId, id);
 }
 
 export async function deleteTask(id: number) {
+  await deletePolymorphicRefsForEntity({ type: "task", id });
   const db = await getDb();
   const [existing] = await db.select().from(tasks).where(eq(tasks.id, id));
   const assigneeIds = existing ? await listTaskAssigneeIds(id) : [];
@@ -199,6 +204,7 @@ export async function deleteTask(id: number) {
       action: "deleted",
     });
   }
-  revalidateTaskPaths(row?.eventId);
+  revalidateTaskPaths(row?.eventId, id);
+  revalidatePath("/notes");
   redirect("/tasks");
 }
