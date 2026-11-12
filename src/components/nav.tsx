@@ -7,6 +7,7 @@ const links = [
   { href: "/contacts", label: "Contacts" },
   { href: "/organizations", label: "Organizations" },
   { href: "/tasks", label: "Tasks" },
+  { href: "/notes", label: "Notes" },
   { href: "/task-groups", label: "Task groups" },
 ];
 

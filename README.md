@@ -19,9 +19,11 @@ Locally, if `DATABASE_URL` is unset, the app uses an on-disk [PGlite](https://pg
 | Organizations | venue / club / agency / promoter / other |
 | Contacts | people, optional org |
 | Events | start datetime, location, venue, status, notes |
-| Event links | contact and/or org with a role |
-| Tasks | kinds: travel, payment, call, email, follow_up, other · statuses: todo / doing / done / skipped |
+| Event links | contact and/or org with a booking role (buyer, performer, …) |
+| Tasks | create individually or from task groups; optional event/contact; kinds: travel, payment, call, email, follow_up, other · statuses: todo / doing / done / skipped |
 | Task groups + templates | reusable packs; each template has `offsetDays` relative to the event start date |
+| Notes | first-class notes attachable to one or more contacts, orgs, events, or tasks |
+| Related records | CRM-style links between any of contact / organization / event / task |
 
 ### Relative task application
 
