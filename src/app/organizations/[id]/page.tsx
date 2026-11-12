@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { connection } from "next/server";
+import { NotesPanel } from "@/components/notes-panel";
+import { RelatedLinksPanel } from "@/components/related-links-panel";
 import {
   Badge,
   ButtonLink,
@@ -12,6 +14,11 @@ import {
 import { contacts, events, getDb, organizations } from "@/db";
 import { deleteOrganization } from "@/lib/actions/organizations";
 import { labelize } from "@/lib/constants";
+import {
+  loadEntityOptions,
+  loadNotesForEntity,
+  loadRelatedLinksForEntity,
+} from "@/lib/entities";
 import { formatDateTime } from "@/lib/format";
 
 export default async function OrganizationDetailPage({
@@ -38,6 +45,12 @@ export default async function OrganizationDetailPage({
     .from(events)
     .where(eq(events.venueOrganizationId, id));
 
+  const [options, noteRows, related] = await Promise.all([
+    loadEntityOptions(),
+    loadNotesForEntity({ type: "organization", id }),
+    loadRelatedLinksForEntity({ type: "organization", id }),
+  ]);
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -62,7 +75,7 @@ export default async function OrganizationDetailPage({
         </div>
         {org.address ? <p>{org.address}</p> : null}
         <p className="mt-3 whitespace-pre-wrap text-[color:var(--muted)]">
-          {org.notes || "No notes."}
+          {org.notes || "No profile notes."}
         </p>
       </div>
 
@@ -113,6 +126,20 @@ export default async function OrganizationDetailPage({
           </ul>
         )}
       </Section>
+
+      <NotesPanel
+        entityType="organization"
+        entityId={id}
+        notes={noteRows}
+        options={options}
+      />
+
+      <RelatedLinksPanel
+        entityType="organization"
+        entityId={id}
+        links={related}
+        options={options}
+      />
     </div>
   );
 }

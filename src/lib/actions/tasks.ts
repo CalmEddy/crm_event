@@ -10,6 +10,7 @@ import {
   type TaskKind,
   type TaskStatus,
 } from "@/lib/constants";
+import { deletePolymorphicRefsForEntity } from "@/lib/entities";
 
 function readTaskFields(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
@@ -38,18 +39,20 @@ function readTaskFields(formData: FormData) {
   };
 }
 
-function revalidateTaskPaths(eventId?: number | null) {
+function revalidateTaskPaths(eventId?: number | null, taskId?: number | null) {
   revalidatePath("/tasks");
   revalidatePath("/");
   if (eventId) revalidatePath(`/events/${eventId}`);
+  if (taskId) revalidatePath(`/tasks/${taskId}`);
 }
 
 export async function createTask(formData: FormData) {
   const fields = readTaskFields(formData);
   const db = await getDb();
   const [row] = await db.insert(tasks).values(fields).returning();
-  revalidateTaskPaths(row.eventId);
-  redirect("/tasks");
+  revalidateTaskPaths(row.eventId, row.id);
+  if (row.contactId) revalidatePath(`/contacts/${row.contactId}`);
+  redirect(`/tasks/${row.id}`);
 }
 
 export async function updateTask(id: number, formData: FormData) {
@@ -60,8 +63,9 @@ export async function updateTask(id: number, formData: FormData) {
     .set({ ...fields, updatedAt: new Date() })
     .where(eq(tasks.id, id))
     .returning();
-  revalidateTaskPaths(row?.eventId);
-  redirect("/tasks");
+  revalidateTaskPaths(row?.eventId, id);
+  if (row?.contactId) revalidatePath(`/contacts/${row.contactId}`);
+  redirect(`/tasks/${id}`);
 }
 
 export async function updateTaskStatus(id: number, formData: FormData) {
@@ -73,12 +77,14 @@ export async function updateTaskStatus(id: number, formData: FormData) {
     .set({ status, updatedAt: new Date() })
     .where(eq(tasks.id, id))
     .returning();
-  revalidateTaskPaths(row?.eventId);
+  revalidateTaskPaths(row?.eventId, id);
 }
 
 export async function deleteTask(id: number) {
+  await deletePolymorphicRefsForEntity({ type: "task", id });
   const db = await getDb();
   const [row] = await db.delete(tasks).where(eq(tasks.id, id)).returning();
-  revalidateTaskPaths(row?.eventId);
+  revalidateTaskPaths(row?.eventId, id);
+  revalidatePath("/notes");
   redirect("/tasks");
 }
