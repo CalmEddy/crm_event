@@ -82,6 +82,68 @@ Published Cursor apps that declare a database get `DATABASE_URL` injected automa
 
 - **Dashboard** — upcoming events, overdue / due-soon tasks
 - **Events** — list + detail (links, tasks, apply task group, recalculate)
+- **Inbound** — recent Resend contact-form intakes and parse failures (links to created events)
 - **Contacts / Organizations** — list + detail
 - **Tasks** — filterable list
 - **Task groups** — editor with friendly offset controls
+
+## Email event intake (Resend Inbound)
+
+Greenroom does **not** host the public Contact form. Your existing site keeps emailing a booking address; Resend Inbound receives that mail and POSTs a signed webhook here.
+
+### 1. Resend DNS + inbound address
+
+1. In [Resend](https://resend.com), add and verify your domain (MX / receiving DNS as Resend documents for Inbound).
+2. Create an inbound address (e.g. `bookings@yourdomain.com`) that the Contact form sends to.
+
+### 2. Webhook
+
+1. Add a webhook endpoint pointing at:
+
+   `https://<your-greenroom-host>/api/inbound/email`
+
+2. Subscribe to **`email.received`**.
+3. Copy the webhook signing secret into `RESEND_WEBHOOK_SECRET` (Svix headers `svix-id`, `svix-timestamp`, `svix-signature`).
+4. Set `RESEND_API_KEY` as well — Resend’s webhook payload is metadata only; Greenroom fetches the body via the Receiving API.
+
+Optional: `INBOUND_DEFAULT_TASK_GROUP_ID` — if set to a `task_groups.id`, that pack is applied when an inquiry is created. Leave unset for no auto-apply.
+
+### 3. Form email body format
+
+The embed’s “send email” action must emit **plain text** (or simple HTML) with one field per line. Labels are matched case-insensitively:
+
+```text
+Name: Jane Buyer
+Email: jane@example.com
+Phone: 555-0100
+Notes: Looking for Saturday late show in March; capacity ~200
+```
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| Name | yes | Becomes the contact name and event title (`Event request — {Name}`) |
+| Email | yes | Upserts the contact by email |
+| Phone | yes | Stored on the contact |
+| Notes | no | Stored on the event (and contact when new / empty) |
+
+Subject can be anything; it is stored on the intake row but not parsed. Missing required fields → `inbound_emails` row with status **failed**, no event. Successful parse → contact upsert, inquiry event with placeholder `startsAt` (+30 days at local noon), contact linked as **buyer**. Re-delivery of the same Resend `email_id` is idempotent (**duplicate**).
+
+### 4. Test sample
+
+**Structured body** (what the website form should send):
+
+```text
+Name: Jane Buyer
+Email: jane.buyer@example.com
+Phone: 555-0100
+Notes: Looking for Saturday late show in March; capacity ~200
+```
+
+**Local intake without Resend** (uses the same processor as the webhook):
+
+```bash
+npx tsx scripts/simulate-inbound.ts          # creates inquiry + contact
+npx tsx scripts/simulate-inbound.ts --fail   # records a failed intake
+```
+
+Then open **Inbound** in the app. For a live Resend check, send the structured body to your inbound address and confirm the webhook delivery in the Resend dashboard.
