@@ -536,6 +536,17 @@ export const savedViews = pgTable("saved_views", {
     .defaultNow(),
 });
 
+export const dashboardLayouts = pgTable("dashboard_layouts", {
+  userId: integer("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** JSON array of DashboardWidget (see src/lib/dashboard/widgets.ts). */
+  widgets: text("widgets").notNull().default("[]"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export type Organization = typeof organizations.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Event = typeof events.$inferSelect;
