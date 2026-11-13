@@ -118,6 +118,8 @@ curl -X POST "https://<your-greenroom-host>/api/cron/due-tasks" \
   -H "Authorization: Bearer $CRON_SECRET"
 ```
 
+Only the `Authorization: Bearer` header is accepted (no query-string secret).
+
 Open tasks (`todo` / `doing`) with `due_on <= today` are grouped per assignee. One digest per user per calendar day (`dedupe_key` prevents repeats).
 
 Greenroom pages and mutations require a signed-in Cursor viewer. `/api/inbound/email` and `/api/cron/due-tasks` use their own secrets (Svix / `CRON_SECRET`) instead.

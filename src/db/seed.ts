@@ -17,7 +17,7 @@ import {
 import { dueOnFromEventDate } from "@/lib/offsets";
 
 export async function ensureSeedData() {
-  const db = await getDb();
+  const db = await getDb({ system: true });
   const [{ value: orgCount }] = await db
     .select({ value: count() })
     .from(organizations);

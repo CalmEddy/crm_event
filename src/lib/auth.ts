@@ -32,7 +32,7 @@ export async function resolveStaffUser(
   const email = identity.email.trim().toLowerCase();
   if (!email) return null;
 
-  const db = await getDb();
+  const db = await getDb({ system: true });
   const [existing] = await db
     .select()
     .from(users)
