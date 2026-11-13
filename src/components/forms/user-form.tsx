@@ -1,22 +1,45 @@
+"use client";
+
+import { useActionState } from "react";
 import {
   Field,
   SubmitButton,
   inputClassName,
 } from "@/components/ui";
 import type { User } from "@/db";
+import {
+  createUser,
+  updateUser,
+  type UserActionState,
+} from "@/lib/actions/users";
 
 export function UserForm({
-  action,
   user,
 }: {
-  action: (formData: FormData) => Promise<void>;
   user?: User;
 }) {
+  const action = user
+    ? updateUser.bind(null, user.id)
+    : createUser;
+
+  const [state, formAction, pending] = useActionState<
+    UserActionState,
+    FormData
+  >(action, {});
+
   return (
     <form
-      action={action}
+      action={formAction}
       className="max-w-xl space-y-4 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5"
     >
+      {state?.error ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-[color:var(--danger)]/40 bg-[color:var(--danger)]/10 px-3 py-2 text-sm text-[color:var(--danger)]"
+        >
+          {state.error}
+        </p>
+      ) : null}
       <Field label="Name">
         <input
           className={inputClassName}
@@ -47,7 +70,15 @@ export function UserForm({
           <option value="false">Inactive</option>
         </select>
       </Field>
-      <SubmitButton>{user ? "Save user" : "Create user"}</SubmitButton>
+      <SubmitButton>
+        {pending
+          ? user
+            ? "Saving…"
+            : "Creating…"
+          : user
+            ? "Save user"
+            : "Create user"}
+      </SubmitButton>
     </form>
   );
 }

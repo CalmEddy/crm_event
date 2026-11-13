@@ -4,12 +4,14 @@ import { connection } from "next/server";
 import { UserForm } from "@/components/forms/user-form";
 import { PageHeader, SubmitButton } from "@/components/ui";
 import { getDb, users } from "@/db";
-import { deleteUser, updateUser } from "@/lib/actions/users";
+import { deleteUser } from "@/lib/actions/users";
+import { requireSignedIn } from "@/lib/auth";
 
 export default async function EditUserPage({
   params,
 }: PageProps<"/users/[id]/edit">) {
   await connection();
+  await requireSignedIn();
   const { id: idParam } = await params;
   const id = Number(idParam);
   if (!Number.isFinite(id)) notFound();
@@ -28,7 +30,7 @@ export default async function EditUserPage({
           </form>
         }
       />
-      <UserForm user={user} action={updateUser.bind(null, id)} />
+      <UserForm user={user} />
     </div>
   );
 }
