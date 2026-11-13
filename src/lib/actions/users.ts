@@ -5,90 +5,123 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb, users } from "@/db";
 import { requireSignedIn } from "@/lib/auth";
+import { isUniqueViolation } from "@/lib/db-errors";
 
-function readUserFields(formData: FormData) {
+export type UserActionState = {
+  error?: string;
+};
+
+function readUserFields(formData: FormData):
+  | { ok: true; name: string; email: string; active: boolean }
+  | { ok: false; error: string } {
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const activeRaw = String(formData.get("active") ?? "true");
   const active = activeRaw === "true" || activeRaw === "on" || activeRaw === "1";
 
-  if (!name) throw new Error("Name is required");
-  if (!email || !email.includes("@")) throw new Error("Valid email is required");
-
-  return { name, email, active };
-}
-
-function isUniqueViolation(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const code = "code" in error ? String(error.code) : "";
-  const message = "message" in error ? String(error.message) : "";
-  return (
-    code === "23505" ||
-    message.includes("users_email_idx") ||
-    message.toLowerCase().includes("duplicate key")
-  );
-}
-
-export async function createUser(formData: FormData) {
-  await requireSignedIn();
-  const fields = readUserFields(formData);
-  const db = await getDb();
-
-  const [existing] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, fields.email))
-    .limit(1);
-  if (existing) {
-    throw new Error(
-      "A staff user with that email already exists. Open Users and edit them instead.",
-    );
+  if (!name) return { ok: false, error: "Name is required" };
+  if (!email || !email.includes("@")) {
+    return { ok: false, error: "Valid email is required" };
   }
 
-  let row: typeof users.$inferSelect;
+  return { ok: true, name, email, active };
+}
+
+function toActionError(error: unknown): UserActionState {
+  if (error instanceof Error && error.message) {
+    return { error: error.message };
+  }
+  return { error: "Something went wrong. Please try again." };
+}
+
+export async function createUser(
+  _prev: UserActionState,
+  formData: FormData,
+): Promise<UserActionState> {
+  let createdId: number | null = null;
+
   try {
-    const inserted = await db.insert(users).values(fields).returning();
-    row = inserted[0];
+    await requireSignedIn();
+    const fields = readUserFields(formData);
+    if (!fields.ok) return { error: fields.error };
+
+    const db = await getDb();
+
+    const [existing] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, fields.email))
+      .limit(1);
+    if (existing) {
+      return {
+        error:
+          "A staff user with that email already exists. Open Users and edit them instead.",
+      };
+    }
+
+    const inserted = await db
+      .insert(users)
+      .values({
+        name: fields.name,
+        email: fields.email,
+        active: fields.active,
+      })
+      .returning();
+    const row = inserted[0];
+    if (!row) return { error: "Could not create user" };
+    createdId = row.id;
   } catch (error) {
     if (isUniqueViolation(error)) {
-      throw new Error(
-        "A staff user with that email already exists. Open Users and edit them instead.",
-      );
+      return {
+        error:
+          "A staff user with that email already exists. Open Users and edit them instead.",
+      };
     }
-    throw error;
+    console.error("createUser failed", error);
+    return toActionError(error);
   }
-
-  if (!row) throw new Error("Could not create user");
 
   revalidatePath("/users");
   revalidatePath("/", "layout");
-  redirect(`/users/${row.id}/edit`);
+  redirect(`/users/${createdId}/edit`);
 }
 
-export async function updateUser(id: number, formData: FormData) {
-  await requireSignedIn();
-  const fields = readUserFields(formData);
-  const db = await getDb();
-
-  const [emailTaken] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, fields.email))
-    .limit(1);
-  if (emailTaken && emailTaken.id !== id) {
-    throw new Error("Another staff user already uses that email.");
-  }
-
+export async function updateUser(
+  id: number,
+  _prev: UserActionState,
+  formData: FormData,
+): Promise<UserActionState> {
   try {
+    await requireSignedIn();
+    const fields = readUserFields(formData);
+    if (!fields.ok) return { error: fields.error };
+
+    const db = await getDb();
+
+    const [emailTaken] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, fields.email))
+      .limit(1);
+    if (emailTaken && emailTaken.id !== id) {
+      return { error: "Another staff user already uses that email." };
+    }
+
     await db
       .update(users)
-      .set({ ...fields, updatedAt: new Date() })
+      .set({
+        name: fields.name,
+        email: fields.email,
+        active: fields.active,
+        updatedAt: new Date(),
+      })
       .where(eq(users.id, id));
   } catch (error) {
     if (isUniqueViolation(error)) {
-      throw new Error("Another staff user already uses that email.");
+      return { error: "Another staff user already uses that email." };
     }
-    throw error;
+    console.error("updateUser failed", error);
+    return toActionError(error);
   }
 
   revalidatePath("/users");
@@ -98,9 +131,17 @@ export async function updateUser(id: number, formData: FormData) {
 }
 
 export async function deleteUser(id: number) {
-  await requireSignedIn();
-  const db = await getDb();
-  await db.delete(users).where(eq(users.id, id));
+  try {
+    await requireSignedIn();
+    const db = await getDb();
+    await db.delete(users).where(eq(users.id, id));
+  } catch (error) {
+    console.error("deleteUser failed", error);
+    throw new Error(
+      error instanceof Error ? error.message : "Could not delete user",
+    );
+  }
+
   revalidatePath("/users");
   revalidatePath("/", "layout");
   redirect("/users");
