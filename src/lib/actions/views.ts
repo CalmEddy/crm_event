@@ -1,7 +1,7 @@
 "use server";
 
 import { and, asc, eq, ilike } from "drizzle-orm";
-import { refresh } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 import { formatISO } from "date-fns";
 import { z } from "zod";
 import {
@@ -18,6 +18,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { entityHref, isEntityType, revalidateEntityPaths } from "@/lib/entities";
 import {
   FieldError,
+  changeAssignees,
   deleteRecords,
   insertRecord,
   parsePatch,
@@ -135,6 +136,29 @@ export async function deleteRecordsAction(
   if (cleaned.length === 0) return { ok: false, error: "Nothing selected." };
   await deleteRecords(entity, cleaned);
   return done(entity, cleaned);
+}
+
+/** Add/remove assignees on tasks or events (row picker, bulk bar, workload board). */
+export async function changeAssigneesAction(
+  entity: string,
+  ids: number[],
+  change: { add: number[]; remove: number[]; cascadeToTasks?: boolean },
+): Promise<ActionResult & { cascaded?: number }> {
+  await requireSignedIn();
+  if (entity !== "task" && entity !== "event") {
+    return { ok: false, error: "Only tasks and events have assignees." };
+  }
+  const cleaned = cleanIds(ids);
+  if (cleaned.length === 0) return { ok: false, error: "Nothing selected." };
+  const { cascaded } = await changeAssignees(entity, cleaned, {
+    add: cleanIds(change.add),
+    remove: cleanIds(change.remove),
+    cascadeToTasks: entity === "event" && Boolean(change.cascadeToTasks),
+  });
+  revalidateEntityPaths(cleaned.map((id) => ({ type: entity, id })));
+  if (cascaded) revalidatePath("/tasks");
+  refresh();
+  return { ok: true, cascaded };
 }
 
 export type SearchHit = { type: EntityType; id: number; label: string; href: string };

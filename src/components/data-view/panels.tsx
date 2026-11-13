@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { EntityViewConfig, FieldDef, Ref, ViewRow } from "@/lib/views/fields";
 import { cellText } from "@/lib/views/query";
+import { AssigneeCell } from "./assignees";
 import { EditableCell, FieldInput } from "./editors";
 
 /** Slide-over record editor: edit every field without leaving the list. */
@@ -72,12 +73,16 @@ export function RecordDrawer({
             <div key={field.key} className="grid grid-cols-[7rem_1fr] items-start gap-3 py-3 text-sm">
               <dt className="pt-1 text-[color:var(--muted)]">{field.label}</dt>
               <dd>
+                {field.type === "users" ? (
+                  <AssigneeCell rowId={row.id} value={(row.values[field.key] as Ref[]) ?? []} />
+                ) : (
                 <EditableCell
                   field={field}
                   value={row.values[field.key]}
                   options={options(field)}
                   onSave={(input) => onEdit(row.id, field, input)}
                 />
+                )}
               </dd>
             </div>
           ))}
@@ -90,7 +95,7 @@ export function RecordDrawer({
             href={`${config.basePath}/${row.id}`}
             className="text-sm font-medium text-[color:var(--accent)] hover:underline"
           >
-            Open full page (notes, links, assignees) →
+            Open full page (notes and links) →
           </Link>
         </div>
       </div>
@@ -152,7 +157,9 @@ export function BulkBar({
   onApply,
   onDelete,
   onClear,
+  assignSlot,
 }: {
+  assignSlot?: React.ReactNode;
   config: EntityViewConfig;
   count: number;
   options: (field: FieldDef) => Ref[];
@@ -216,6 +223,7 @@ export function BulkBar({
           </button>
         </>
       ) : null}
+      {assignSlot}
       <span className="mx-1 h-5 w-px bg-[color:var(--line)]" aria-hidden />
       {confirming ? (
         <span className="inline-flex items-center gap-2 text-sm">

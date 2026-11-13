@@ -30,7 +30,7 @@ export function availableViews(config: EntityViewConfig): ViewType[] {
   return VIEW_TYPES.filter(
     (view) =>
       (view !== "calendar" || config.calendarKey) &&
-      (view !== "board" || config.fields.some((f) => f.type === "enum")),
+      (view !== "board" || config.fields.some((f) => f.type === "enum" || f.type === "users")),
   );
 }
 
@@ -51,7 +51,9 @@ export function parseViewState(
 
   const group = params.get("group") ?? "";
   const boardParam = params.get("board") ?? config.boardKey ?? "";
-  const enumKeys = config.fields.filter((f) => f.type === "enum").map((f) => f.key);
+  const enumKeys = config.fields
+    .filter((f) => f.type === "enum" || f.type === "users")
+    .map((f) => f.key);
   const board = enumKeys.includes(boardParam) ? boardParam : (enumKeys[0] ?? "");
 
   const colsParam = params.get("cols");
