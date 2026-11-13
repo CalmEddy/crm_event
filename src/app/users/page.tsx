@@ -19,7 +19,7 @@ export default async function UsersPage() {
     <div>
       <PageHeader
         title="Users"
-        description="Agency staff who can be assigned to events and tasks."
+        description="Agency staff who can be assigned to events and tasks. Signing in auto-adds your Cursor email if it is not listed yet."
         actions={<ButtonLink href="/users/new">Add user</ButtonLink>}
       />
       {rows.length === 0 ? (

@@ -8,10 +8,17 @@ import {
 } from "../../cursor/identity";
 import { getDb, users, type User } from "@/db";
 
-/** Require a signed-in Cursor viewer (throws IdentityError / 401). */
+/** Require a signed-in Cursor viewer. */
 export async function requireSignedIn(): Promise<VerifiedIdentity> {
-  const h = await headers();
-  return requireIdentity(h, { onFailure: "throw" });
+  try {
+    const h = await headers();
+    return await requireIdentity(h, { onFailure: "throw" });
+  } catch (error) {
+    if (error instanceof IdentityError) {
+      throw new Error("Sign in required to continue.");
+    }
+    throw error;
+  }
 }
 
 /** Soft read for UI (nav / layout). */
