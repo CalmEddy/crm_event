@@ -3,6 +3,7 @@
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { getDb, noteLinks, notes, type EntityType } from "@/db";
+import { requireSignedIn } from "@/lib/auth";
 import {
   entityHref,
   isEntityType,
@@ -49,6 +50,7 @@ export async function createNoteForEntity(
   entityId: number,
   formData: FormData,
 ) {
+  await requireSignedIn();
   const primary = parseEntityRef(entityType, String(entityId));
   if (!primary) throw new Error("Invalid entity");
 
@@ -71,6 +73,7 @@ export async function createNoteForEntity(
 }
 
 export async function createStandaloneNote(formData: FormData) {
+  await requireSignedIn();
   const body = String(formData.get("body") ?? "").trim();
   if (!body) throw new Error("Note body is required");
 
@@ -93,6 +96,7 @@ export async function createStandaloneNote(formData: FormData) {
 }
 
 export async function deleteNote(noteId: number, returnTo: string) {
+  await requireSignedIn();
   const db = await getDb();
   const links = await db
     .select()

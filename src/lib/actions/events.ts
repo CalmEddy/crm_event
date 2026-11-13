@@ -18,6 +18,7 @@ import {
   eventDeletedMessage,
 } from "@/lib/notifications/messages";
 import { notifyUsers } from "@/lib/notifications/notify";
+import { requireSignedIn } from "@/lib/auth";
 
 function readEventFields(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
@@ -117,6 +118,7 @@ async function notifyEventAssignees(options: {
 }
 
 export async function createEvent(formData: FormData) {
+  await requireSignedIn();
   const fields = readEventFields(formData);
   const assigneeIds = readAssigneeIds(formData);
   const db = await getDb();
@@ -134,6 +136,7 @@ export async function createEvent(formData: FormData) {
 }
 
 export async function updateEvent(id: number, formData: FormData) {
+  await requireSignedIn();
   const fields = readEventFields(formData);
   const assigneeIds = readAssigneeIds(formData);
   const db = await getDb();
@@ -158,6 +161,7 @@ export async function updateEvent(id: number, formData: FormData) {
 }
 
 export async function deleteEvent(id: number) {
+  await requireSignedIn();
   await deletePolymorphicRefsForEntity({ type: "event", id });
   const db = await getDb();
   const [existing] = await db.select().from(events).where(eq(events.id, id));
@@ -177,6 +181,7 @@ export async function deleteEvent(id: number) {
 }
 
 export async function addEventLink(eventId: number, formData: FormData) {
+  await requireSignedIn();
   const role = String(formData.get("role") ?? "contact").trim() || "contact";
   const notes = String(formData.get("notes") ?? "").trim() || null;
   const contactRaw = String(formData.get("contactId") ?? "").trim();
@@ -203,6 +208,7 @@ export async function addEventLink(eventId: number, formData: FormData) {
 }
 
 export async function removeEventLink(eventId: number, linkId: number) {
+  await requireSignedIn();
   const db = await getDb();
   await db
     .delete(eventContacts)

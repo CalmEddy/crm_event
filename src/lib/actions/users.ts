@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb, users } from "@/db";
-import { setCurrentUserCookie } from "@/lib/current-user";
+import { requireSignedIn } from "@/lib/auth";
 
 function readUserFields(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
@@ -18,22 +18,8 @@ function readUserFields(formData: FormData) {
   return { name, email, active };
 }
 
-export async function setCurrentUser(formData: FormData) {
-  const raw = String(formData.get("userId") ?? "").trim();
-  if (!raw) {
-    await setCurrentUserCookie(null);
-  } else {
-    const id = Number(raw);
-    if (!Number.isFinite(id)) throw new Error("Invalid user");
-    const db = await getDb();
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    if (!user || !user.active) throw new Error("User not found");
-    await setCurrentUserCookie(user.id);
-  }
-  revalidatePath("/", "layout");
-}
-
 export async function createUser(formData: FormData) {
+  await requireSignedIn();
   const fields = readUserFields(formData);
   const db = await getDb();
   const [row] = await db.insert(users).values(fields).returning();
@@ -43,6 +29,7 @@ export async function createUser(formData: FormData) {
 }
 
 export async function updateUser(id: number, formData: FormData) {
+  await requireSignedIn();
   const fields = readUserFields(formData);
   const db = await getDb();
   await db
@@ -56,6 +43,7 @@ export async function updateUser(id: number, formData: FormData) {
 }
 
 export async function deleteUser(id: number) {
+  await requireSignedIn();
   const db = await getDb();
   await db.delete(users).where(eq(users.id, id));
   revalidatePath("/users");

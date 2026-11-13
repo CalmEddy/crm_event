@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { getDb, organizations } from "@/db";
 import { ORGANIZATION_TYPES, type OrganizationType } from "@/lib/constants";
 import { deletePolymorphicRefsForEntity } from "@/lib/entities";
+import { requireSignedIn } from "@/lib/auth";
 
 function readOrgFields(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
@@ -21,6 +22,7 @@ function readOrgFields(formData: FormData) {
 }
 
 export async function createOrganization(formData: FormData) {
+  await requireSignedIn();
   const fields = readOrgFields(formData);
   const db = await getDb();
   const [row] = await db.insert(organizations).values(fields).returning();
@@ -29,6 +31,7 @@ export async function createOrganization(formData: FormData) {
 }
 
 export async function updateOrganization(id: number, formData: FormData) {
+  await requireSignedIn();
   const fields = readOrgFields(formData);
   const db = await getDb();
   await db
@@ -41,6 +44,7 @@ export async function updateOrganization(id: number, formData: FormData) {
 }
 
 export async function deleteOrganization(id: number) {
+  await requireSignedIn();
   await deletePolymorphicRefsForEntity({ type: "organization", id });
   const db = await getDb();
   await db.delete(organizations).where(eq(organizations.id, id));

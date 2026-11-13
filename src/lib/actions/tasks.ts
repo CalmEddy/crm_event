@@ -23,6 +23,7 @@ import {
   taskDeletedMessage,
 } from "@/lib/notifications/messages";
 import { notifyUsers } from "@/lib/notifications/notify";
+import { requireSignedIn } from "@/lib/auth";
 
 function readTaskFields(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
@@ -131,6 +132,7 @@ async function notifyTaskAssignees(options: {
 }
 
 export async function createTask(formData: FormData) {
+  await requireSignedIn();
   const fields = readTaskFields(formData);
   const assigneeIds = readAssigneeIds(formData);
   const db = await getDb();
@@ -148,6 +150,7 @@ export async function createTask(formData: FormData) {
 }
 
 export async function updateTask(id: number, formData: FormData) {
+  await requireSignedIn();
   const fields = readTaskFields(formData);
   const assigneeIds = readAssigneeIds(formData);
   const db = await getDb();
@@ -172,6 +175,7 @@ export async function updateTask(id: number, formData: FormData) {
 }
 
 export async function updateTaskStatus(id: number, formData: FormData) {
+  await requireSignedIn();
   const status = String(formData.get("status") ?? "") as TaskStatus;
   if (!TASK_STATUSES.includes(status)) throw new Error("Invalid status");
   const db = await getDb();
@@ -192,6 +196,7 @@ export async function updateTaskStatus(id: number, formData: FormData) {
 }
 
 export async function deleteTask(id: number) {
+  await requireSignedIn();
   await deletePolymorphicRefsForEntity({ type: "task", id });
   const db = await getDb();
   const [existing] = await db.select().from(tasks).where(eq(tasks.id, id));
