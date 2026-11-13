@@ -1,14 +1,9 @@
 import Link from "next/link";
-import {
-  Field,
-  Section,
-  SubmitButton,
-  inputClassName,
-} from "@/components/ui";
-import { createEntityLink, removeEntityLink } from "@/lib/actions/links";
+import { LinkSearch } from "@/components/link-search";
+import { Section, SubmitButton } from "@/components/ui";
+import { removeEntityLink } from "@/lib/actions/links";
 import {
   ENTITY_LINK_ROLES,
-  ENTITY_TYPES,
   entityTypeLabel,
   type EntityOptionMap,
   type RelatedLinkView,
@@ -20,23 +15,13 @@ export function RelatedLinksPanel({
   entityType,
   entityId,
   links,
-  options,
 }: {
   entityType: EntityType;
   entityId: number;
   links: RelatedLinkView[];
-  options: EntityOptionMap;
+  /** Unused since linking moved to the type-ahead box; kept for callers. */
+  options?: EntityOptionMap;
 }) {
-  const linkTargets = ENTITY_TYPES.flatMap((type) =>
-    options[type]
-      .filter((row) => !(type === entityType && row.id === entityId))
-      .map((row) => ({
-        type,
-        id: row.id,
-        label: `${entityTypeLabel(type)}: ${row.label}`,
-      })),
-  );
-
   return (
     <Section title="Related records">
       {links.length === 0 ? (
@@ -79,39 +64,12 @@ export function RelatedLinksPanel({
         </ul>
       )}
 
-      <form
-        action={createEntityLink.bind(null, entityType, entityId)}
-        className="grid max-w-3xl gap-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4 sm:grid-cols-2"
-      >
-        <Field label="Link to">
-          <select className={inputClassName} name="toRef" required defaultValue="">
-            <option value="">Select record…</option>
-            {linkTargets.map((target) => (
-              <option
-                key={`${target.type}-${target.id}`}
-                value={`${target.type}:${target.id}`}
-              >
-                {target.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Role">
-          <select className={inputClassName} name="role" defaultValue="related">
-            {ENTITY_LINK_ROLES.map((role) => (
-              <option key={role} value={role}>
-                {labelize(role)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Link notes">
-          <input className={inputClassName} name="notes" placeholder="Optional" />
-        </Field>
-        <div className="flex items-end">
-          <SubmitButton>Add link</SubmitButton>
-        </div>
-      </form>
+      <LinkSearch
+        fromType={entityType}
+        fromId={entityId}
+        linked={links.map((link) => `${link.other.type}:${link.other.id}`)}
+        roles={ENTITY_LINK_ROLES}
+      />
     </Section>
   );
 }
