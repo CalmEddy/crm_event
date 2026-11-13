@@ -1,36 +1,41 @@
 import { Suspense } from "react";
 import type { EntityType } from "@/db";
 import { getCurrentUserId, listActiveUsers } from "@/lib/current-user";
+import { isEntityType, loadEntityOptions } from "@/lib/entities";
 import { VIEW_CONFIGS, type Ref } from "@/lib/views/fields";
 import { loadSavedViews, loadViewRows } from "@/lib/views/load";
 import { DataView } from "./data-view";
 
-/** Server wrapper: loads rows + saved views, then hands off to the client view. */
+/** Server wrapper: loads rows, saved views and choices, then hands off to the client view. */
 export async function EntityDataView({ entity }: { entity: EntityType }) {
   const config = VIEW_CONFIGS[entity];
-  const [rows, currentUserId, activeUsers] = await Promise.all([
+  const [rows, currentUserId, activeUsers, entityOptions] = await Promise.all([
     loadViewRows(entity),
     getCurrentUserId(),
     listActiveUsers(),
+    loadEntityOptions(),
   ]);
   const savedViews = await loadSavedViews(entity, currentUserId);
 
-  // Filter choices: every active user for user fields; refs present in the data for relations.
   const refOptions: Record<string, Ref[]> = {};
+  const editOptions: Record<string, Ref[]> = {};
   for (const field of config.fields) {
     if (field.type === "users") {
       refOptions[field.key] = activeUsers.map((u) => ({ id: u.id, label: u.name }));
-    } else if (field.type === "relation") {
-      const seen = new Map<number, Ref>();
-      for (const row of rows) {
-        const value = row.values[field.key];
-        if (value && typeof value === "object" && !Array.isArray(value)) {
-          seen.set(value.id, value);
-        }
-      }
-      refOptions[field.key] = [...seen.values()].sort((a, b) =>
-        a.label.localeCompare(b.label),
+    } else if (field.type === "relation" && isEntityType(field.key)) {
+      // Relation field keys name the entity they point at (event, contact, organization).
+      const all = entityOptions[field.key];
+      editOptions[field.key] = all;
+      // Filters only offer values that appear in the data.
+      const used = new Set(
+        rows.map((row) => {
+          const value = row.values[field.key];
+          return value && typeof value === "object" && !Array.isArray(value) ? value.id : null;
+        }),
       );
+      refOptions[field.key] = all
+        .filter((option) => used.has(option.id))
+        .sort((a, b) => a.label.localeCompare(b.label));
     }
   }
 
@@ -42,6 +47,7 @@ export async function EntityDataView({ entity }: { entity: EntityType }) {
         savedViews={savedViews}
         currentUserId={currentUserId}
         refOptions={refOptions}
+        editOptions={editOptions}
       />
     </Suspense>
   );

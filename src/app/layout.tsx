@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
 import { headers } from "next/headers";
+import { CommandPalette } from "@/components/command-palette";
 import { Nav } from "@/components/nav";
 import { getIdentity } from "../../cursor/identity";
 import "./globals.css";
@@ -47,6 +48,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             </div>
           )}
         </main>
+        {signedIn ? <CommandPalette /> : null}
       </body>
     </html>
   );

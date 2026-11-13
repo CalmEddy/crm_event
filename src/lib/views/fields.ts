@@ -62,13 +62,13 @@ export const VIEW_CONFIGS: Record<EntityType, EntityViewConfig> = {
     boardKey: "status",
     defaultSort: "dueOn",
     fields: [
-      { key: "title", label: "Task", type: "text" },
-      { key: "dueOn", label: "Due", type: "date" },
+      { key: "title", label: "Task", type: "text", editable: true },
+      { key: "dueOn", label: "Due", type: "date", editable: true },
       { key: "status", label: "Status", type: "enum", options: opts(TASK_STATUSES), editable: true },
       { key: "kind", label: "Kind", type: "enum", options: opts(TASK_KINDS), editable: true },
       { key: "assignees", label: "Assignees", type: "users" },
-      { key: "event", label: "Event", type: "relation" },
-      { key: "contact", label: "Contact", type: "relation", hiddenByDefault: true },
+      { key: "event", label: "Event", type: "relation", editable: true },
+      { key: "contact", label: "Contact", type: "relation", hiddenByDefault: true, editable: true },
     ],
   },
   event: {
@@ -82,10 +82,10 @@ export const VIEW_CONFIGS: Record<EntityType, EntityViewConfig> = {
     boardKey: "status",
     defaultSort: "startsAt",
     fields: [
-      { key: "title", label: "Event", type: "text" },
-      { key: "startsAt", label: "When", type: "datetime" },
-      { key: "venue", label: "Venue", type: "text" },
-      { key: "location", label: "Location", type: "text", hiddenByDefault: true },
+      { key: "title", label: "Event", type: "text", editable: true },
+      { key: "startsAt", label: "When", type: "datetime", editable: true },
+      { key: "venue", label: "Venue", type: "text", editable: true },
+      { key: "location", label: "Location", type: "text", hiddenByDefault: true, editable: true },
       { key: "status", label: "Status", type: "enum", options: opts(EVENT_STATUSES), editable: true },
       { key: "assignees", label: "Assignees", type: "users" },
     ],
@@ -99,11 +99,11 @@ export const VIEW_CONFIGS: Record<EntityType, EntityViewConfig> = {
     subtitleKeys: ["role", "organization", "email"],
     defaultSort: "name",
     fields: [
-      { key: "name", label: "Name", type: "text" },
-      { key: "role", label: "Role", type: "text" },
-      { key: "organization", label: "Organization", type: "relation" },
-      { key: "email", label: "Email", type: "text" },
-      { key: "phone", label: "Phone", type: "text" },
+      { key: "name", label: "Name", type: "text", editable: true },
+      { key: "role", label: "Role", type: "text", editable: true },
+      { key: "organization", label: "Organization", type: "relation", editable: true },
+      { key: "email", label: "Email", type: "text", editable: true },
+      { key: "phone", label: "Phone", type: "text", editable: true },
     ],
   },
   organization: {
@@ -116,10 +116,10 @@ export const VIEW_CONFIGS: Record<EntityType, EntityViewConfig> = {
     boardKey: "type",
     defaultSort: "name",
     fields: [
-      { key: "name", label: "Name", type: "text" },
+      { key: "name", label: "Name", type: "text", editable: true },
       { key: "type", label: "Type", type: "enum", options: opts(ORGANIZATION_TYPES), editable: true },
-      { key: "city", label: "City", type: "text" },
-      { key: "address", label: "Address", type: "text", hiddenByDefault: true },
+      { key: "city", label: "City", type: "text", editable: true },
+      { key: "address", label: "Address", type: "text", hiddenByDefault: true, editable: true },
     ],
   },
 };
@@ -133,6 +133,5 @@ export function fieldByKey(config: EntityViewConfig, key: string) {
 }
 
 export function isEditableField(entity: EntityType, key: string) {
-  const field = fieldByKey(VIEW_CONFIGS[entity], key);
-  return Boolean(field?.editable && field.type === "enum");
+  return Boolean(fieldByKey(VIEW_CONFIGS[entity], key)?.editable);
 }

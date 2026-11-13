@@ -41,6 +41,7 @@ export async function Nav() {
           </nav>
           {label ? (
             <p className="text-xs text-[color:var(--muted)]">
+              <kbd className="mr-2 rounded border border-[color:var(--line)] px-1 font-sans">Ctrl K</kbd>
               Signed in as{" "}
               <span className="text-[color:var(--ink)]">{label}</span>
               {staff?.email ? ` · ${staff.email}` : ""}
