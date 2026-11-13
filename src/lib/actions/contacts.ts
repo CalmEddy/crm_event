@@ -1,5 +1,6 @@
 "use server";
 
+import { logCreated, logDeleted, logUpdated, snapshot } from "@/lib/activity";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -34,6 +35,7 @@ export async function createContact(formData: FormData) {
   const fields = readContactFields(formData);
   const db = await getDb();
   const [row] = await db.insert(contacts).values(fields).returning();
+  await logCreated("contact", row.id);
   revalidatePath("/contacts");
   redirect(`/contacts/${row.id}`);
 }
@@ -42,10 +44,12 @@ export async function updateContact(id: number, formData: FormData) {
   await requireSignedIn();
   const fields = readContactFields(formData);
   const db = await getDb();
+  const before = await snapshot("contact", id);
   await db
     .update(contacts)
     .set({ ...fields, updatedAt: new Date() })
     .where(eq(contacts.id, id));
+  await logUpdated("contact", id, before);
   revalidatePath("/contacts");
   revalidatePath(`/contacts/${id}`);
   redirect(`/contacts/${id}`);
@@ -55,6 +59,7 @@ export async function deleteContact(id: number) {
   await requireSignedIn();
   await deletePolymorphicRefsForEntity({ type: "contact", id });
   const db = await getDb();
+  await logDeleted("contact", id, await snapshot("contact", id));
   await db.delete(contacts).where(eq(contacts.id, id));
   revalidatePath("/contacts");
   revalidatePath("/notes");

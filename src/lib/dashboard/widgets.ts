@@ -18,6 +18,7 @@ export const WIDGET_TYPES = {
   my_tasks: { label: "My tasks", defaultSize: 2 },
   pipeline: { label: "Event pipeline", defaultSize: 2 },
   saved_view: { label: "Saved view", defaultSize: 2 },
+  activity: { label: "Recent activity", defaultSize: 1 },
 } as const;
 export type WidgetType = keyof typeof WIDGET_TYPES;
 

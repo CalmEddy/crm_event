@@ -2,7 +2,9 @@
 import Link from "next/link";
 import { and, asc, count, eq, gte, inArray, lt, lte, ne, notExists, notInArray } from "drizzle-orm";
 import { addDays, formatISO } from "date-fns";
+import { ActivityList } from "@/components/activity-timeline";
 import { Badge } from "@/components/ui";
+import { listActivity } from "@/lib/activity";
 import { events, getDb, savedViews, taskAssignees, tasks, type Task } from "@/db";
 import { EVENT_STATUSES, labelize } from "@/lib/constants";
 import type { DashboardWidget, KpiMetric } from "@/lib/dashboard/widgets";
@@ -42,6 +44,8 @@ export async function WidgetContent({
       return <TaskWidget type={widget.type} limit={limit} userId={userId} />;
     case "pipeline":
       return <Pipeline />;
+    case "activity":
+      return <ActivityList items={await listActivity(null, limit)} showRecord />;
     case "saved_view":
       return <SavedViewWidget viewId={widget.viewId} limit={limit} userId={userId} />;
   }

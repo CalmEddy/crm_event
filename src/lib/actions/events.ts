@@ -1,5 +1,6 @@
 "use server";
 
+import { logAssignees, logCreated, logDeleted, logUpdated, snapshot } from "@/lib/activity";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -124,6 +125,8 @@ export async function createEvent(formData: FormData) {
   const db = await getDb();
   const [row] = await db.insert(events).values(fields).returning();
   const { next, added } = await replaceEventAssignees(row.id, assigneeIds);
+  await logCreated("event", row.id);
+  await logAssignees("event", row.id, added);
   await notifyEventAssignees({
     event: row,
     assigneeIds: next,
@@ -140,12 +143,15 @@ export async function updateEvent(id: number, formData: FormData) {
   const fields = readEventFields(formData);
   const assigneeIds = readAssigneeIds(formData);
   const db = await getDb();
+  const before = await snapshot("event", id);
   const [row] = await db
     .update(events)
     .set({ ...fields, updatedAt: new Date() })
     .where(eq(events.id, id))
     .returning();
   const { next, added } = await replaceEventAssignees(id, assigneeIds);
+  await logUpdated("event", id, before);
+  await logAssignees("event", id, added);
   if (row) {
     await notifyEventAssignees({
       event: row,
@@ -167,6 +173,7 @@ export async function deleteEvent(id: number) {
   const [existing] = await db.select().from(events).where(eq(events.id, id));
   const assigneeIds = existing ? await listEventAssigneeIds(id) : [];
   await db.delete(events).where(eq(events.id, id));
+  if (existing) await logDeleted("event", id, existing);
   if (existing) {
     await notifyEventAssignees({
       event: existing,

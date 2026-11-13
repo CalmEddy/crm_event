@@ -19,6 +19,7 @@ import {
   TASK_KINDS,
   TASK_STATUSES,
 } from "@/lib/constants";
+import { logAssignees, logCreated, logDeleted, logUpdated, snapshot } from "@/lib/activity";
 import { getCurrentUserId } from "@/lib/current-user";
 import { deletePolymorphicRefsForEntity } from "@/lib/entities";
 import {
@@ -113,17 +114,23 @@ export async function updateRecords(
   if (ids.length === 0) return;
   const db = await getDb();
   const table = TABLES[entity];
+  const before = new Map<number, Awaited<ReturnType<typeof snapshot>>>();
+  for (const id of ids) before.set(id, await snapshot(entity, id));
   await db
     .update(table)
     .set({ ...patch, updatedAt: new Date() } as never)
     .where(inArray(table.id, ids));
-  for (const id of ids) await notifyRecordChange(entity, id, "updated");
+  for (const id of ids) {
+    await logUpdated(entity, id, before.get(id) ?? null);
+    await notifyRecordChange(entity, id, "updated");
+  }
 }
 
 export async function insertRecord(entity: EntityType, values: Record<string, unknown>) {
   const db = await getDb();
   const table = TABLES[entity];
   const rows = (await db.insert(table).values(values as never).returning()) as { id: number }[];
+  await logCreated(entity, rows[0].id);
   return rows[0].id;
 }
 
@@ -133,6 +140,7 @@ export async function deleteRecords(entity: EntityType, ids: number[]) {
   for (const id of ids) {
     // Notify before the row (and its assignee links) disappear.
     await notifyRecordChange(entity, id, "deleted");
+    await logDeleted(entity, id, await snapshot(entity, id));
     await deletePolymorphicRefsForEntity({ type: entity, id });
     await db.delete(table).where(eq(table.id, id));
   }
@@ -224,6 +232,7 @@ export async function changeAssignees(
   if (entity === "event") {
     for (const eventId of ids) {
       const before = new Set(await listEventAssigneeIds(eventId));
+      await logAssignees("event", eventId, add.filter((id) => !before.has(id)), remove.filter((id) => before.has(id)));
       if (remove.length) {
         await db
           .delete(eventAssignees)
@@ -251,6 +260,7 @@ export async function changeAssignees(
 
   for (const taskId of taskIds) {
     const before = new Set(await listTaskAssigneeIds(taskId));
+    await logAssignees("task", taskId, add.filter((id) => !before.has(id)), remove.filter((id) => before.has(id)));
     if (remove.length) {
       await db
         .delete(taskAssignees)

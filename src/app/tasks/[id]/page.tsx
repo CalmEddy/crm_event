@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { connection } from "next/server";
+import { ActivityTimeline } from "@/components/activity-timeline";
 import { NotesPanel } from "@/components/notes-panel";
 import { RelatedLinksPanel } from "@/components/related-links-panel";
 import {
@@ -136,6 +137,8 @@ export default async function TaskDetailPage({
         links={related}
         options={options}
       />
+
+      <ActivityTimeline entity="task" id={id} />
 
       <Section title="Quick actions">
         <div className="flex flex-wrap gap-2">

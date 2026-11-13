@@ -28,6 +28,7 @@ import {
   type ViewType,
 } from "@/lib/views/query";
 import { AssignContext, AssigneePicker, type AssignApi } from "./assignees";
+import { CsvTools } from "./csv-tools";
 import { toCellValue, toWireValue } from "./editors";
 import { WorkloadView } from "./workload";
 import { BulkBar, QuickAdd, RecordDrawer } from "./panels";
@@ -502,6 +503,7 @@ export function DataView({
         <span className="ml-auto text-sm text-[color:var(--muted)]">
           {visible.length} of {rows.length}
         </span>
+        <CsvTools config={config} rows={visible} cols={state.cols} />
       </div>
 
       {error ? (
