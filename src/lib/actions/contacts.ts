@@ -7,11 +7,10 @@ import { redirect } from "next/navigation";
 import { contacts, getDb } from "@/db";
 import { deletePolymorphicRefsForEntity } from "@/lib/entities";
 import { requireSignedIn } from "@/lib/auth";
+import { CONTACT_KEYS, readContactInfo } from "@/lib/contact-info";
 
 function readContactFields(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim() || null;
-  const phone = String(formData.get("phone") ?? "").trim() || null;
   const role = String(formData.get("role") ?? "").trim() || null;
   const notes = String(formData.get("notes") ?? "").trim() || null;
   const organizationRaw = String(formData.get("organizationId") ?? "").trim();
@@ -21,8 +20,7 @@ function readContactFields(formData: FormData) {
 
   return {
     name,
-    email,
-    phone,
+    ...readContactInfo(formData, CONTACT_KEYS),
     role,
     notes,
     organizationId:

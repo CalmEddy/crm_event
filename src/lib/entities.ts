@@ -3,6 +3,8 @@ import { revalidatePath } from "next/cache";
 import {
   contacts,
   customValues,
+  recordOwners,
+  recordTags,
   entityLinks,
   events,
   getDb,
@@ -265,6 +267,12 @@ export async function loadRelatedLinksForEntity(
 export async function deletePolymorphicRefsForEntity(ref: EntityRef) {
   const db = await getDb();
 
+  await db
+    .delete(recordTags)
+    .where(and(eq(recordTags.entity, ref.type), eq(recordTags.entityId, ref.id)));
+  await db
+    .delete(recordOwners)
+    .where(and(eq(recordOwners.entity, ref.type), eq(recordOwners.entityId, ref.id)));
   await db
     .delete(customValues)
     .where(and(eq(customValues.entity, ref.type), eq(customValues.entityId, ref.id)));

@@ -147,6 +147,12 @@ export const organizations = pgTable("organizations", {
   type: organizationTypeEnum("type").notNull().default("other"),
   address: text("address"),
   city: text("city"),
+  email: text("email"),
+  phone: text("phone"),
+  website: text("website"),
+  region: text("region"),
+  postalCode: text("postal_code"),
+  country: text("country"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -161,6 +167,13 @@ export const contacts = pgTable("contacts", {
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
+  mobile: text("mobile"),
+  website: text("website"),
+  address: text("address"),
+  city: text("city"),
+  region: text("region"),
+  postalCode: text("postal_code"),
+  country: text("country"),
   role: text("role"),
   notes: text("notes"),
   organizationId: integer("organization_id").references(() => organizations.id, {
@@ -592,6 +605,41 @@ export const customValues = pgTable(
   (table) => [primaryKey({ columns: [table.fieldId, table.entityId] })],
 );
 
+export const tags = pgTable("tags", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  /** Palette key, see TAG_COLORS. */
+  color: text("color").notNull().default("slate"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const recordTags = pgTable(
+  "record_tags",
+  {
+    tagId: integer("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    entity: entityTypeEnum("entity").notNull(),
+    entityId: integer("entity_id").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tagId, table.entity, table.entityId] })],
+);
+
+/** Several staff owners per contact or organization. */
+export const recordOwners = pgTable(
+  "record_owners",
+  {
+    entity: entityTypeEnum("entity").notNull(),
+    entityId: integer("entity_id").notNull(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.entity, table.entityId, table.userId] })],
+);
+
 export type Organization = typeof organizations.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Event = typeof events.$inferSelect;
@@ -609,4 +657,5 @@ export type EntityLink = typeof entityLinks.$inferSelect;
 export type EntityType = (typeof entityTypeEnum.enumValues)[number];
 export type ActivityEntry = typeof activityLog.$inferSelect;
 export type CustomField = typeof customFields.$inferSelect;
+export type Tag = typeof tags.$inferSelect;
 export type SavedView = typeof savedViews.$inferSelect;

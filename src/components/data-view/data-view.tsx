@@ -29,7 +29,10 @@ import {
   type ViewType,
 } from "@/lib/views/query";
 import { AssignContext, AssigneePicker, type AssignApi } from "./assignees";
+import { changeTagsAction, createTagAction } from "@/lib/actions/tags";
+import type { TagOption } from "@/lib/tag-colors";
 import { CsvTools } from "./csv-tools";
+import { TagContext, TagPicker, type TagApi } from "./tags";
 import { toCellValue, toWireValue } from "./editors";
 import { WorkloadView } from "./workload";
 import { BulkBar, QuickAdd, RecordDrawer } from "./panels";
@@ -71,7 +74,10 @@ export function DataView({
   refOptions,
   editOptions,
   customFields,
+  tagOptions = [],
 }: {
+  /** Every tag, with colors. */
+  tagOptions?: TagOption[];
   /** User-defined fields appended to the built-in config. */
   customFields?: FieldDef[];
   entity: EntityType;
@@ -168,10 +174,43 @@ export function DataView({
   }
 
   const usersField = config.fields.find((f) => f.type === "users");
+  const tagsField = config.fields.find((f) => f.type === "tags");
+  const [createdTags, setCreatedTags] = useState<TagOption[]>([]);
+  const allTags = useMemo(() => {
+    const known = new Set(tagOptions.map((t) => t.id));
+    return [...tagOptions, ...createdTags.filter((t) => !known.has(t.id))];
+  }, [tagOptions, createdTags]);
+  const tagApi: TagApi | null = tagsField
+    ? {
+        tags: allTags,
+        change: (ids, add, remove) => {
+          setError(null);
+          startTransition(async () => {
+            applyOptimistic({ kind: "assign", key: tagsField.key, ids, add, remove });
+            const result = await changeTagsAction(entity, ids, {
+              add: add.map((tag) => tag.id),
+              remove,
+            });
+            if (!result.ok) setError(result.error);
+          });
+        },
+        create: async (name) => {
+          const result = await createTagAction(name);
+          if (!result.ok) {
+            setError(result.error);
+            return null;
+          }
+          setCreatedTags((list) => [...list, result.tag]);
+          return result.tag;
+        },
+      }
+    : null;
+
   const assignApi: AssignApi | null =
-    usersField && (entity === "task" || entity === "event")
+    usersField
       ? {
           entity,
+          noun: usersField.label,
           users: refOptions[usersField.key] ?? [],
           currentUserId,
           change: (ids, add, remove, cascadeToTasks) => {
@@ -285,6 +324,7 @@ export function DataView({
     (field) =>
       field.type === "enum" ||
       field.type === "users" ||
+      field.type === "tags" ||
       field.type === "relation" ||
       field.type === "date" ||
       field.type === "datetime",
@@ -296,6 +336,7 @@ export function DataView({
 
   return (
     <AssignContext.Provider value={assignApi}>
+    <TagContext.Provider value={tagApi}>
     <div className="space-y-4">
       {/* Saved view tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[color:var(--line)] pb-3">
@@ -480,8 +521,11 @@ export function DataView({
                     ...(field.type === "users" && currentUserId != null
                       ? [{ value: ME, label: "Me" }]
                       : []),
-                    { value: "none", label: field.type === "users" ? "Unassigned" : "None" },
-                    ...(refOptions[field.key] ?? []).map((ref) => ({
+                    {
+                      value: "none",
+                      label: field.type === "users" ? "Unassigned" : field.type === "tags" ? "No tags" : "None",
+                    },
+                    ...(field.type === "tags" ? allTags : (refOptions[field.key] ?? [])).map((ref) => ({
                       value: String(ref.id),
                       label: ref.label,
                     })),
@@ -581,14 +625,19 @@ export function DataView({
           onDelete={deleteSelected}
           onClear={() => setSelected(new Set())}
           assignSlot={
-            assignApi ? (
-              <AssigneePicker
-                api={assignApi}
-                ids={[...selectedVisible]}
-                value={[]}
-                label="Assignees…"
-              />
-            ) : null
+            <>
+              {assignApi ? (
+                <AssigneePicker
+                  api={assignApi}
+                  ids={[...selectedVisible]}
+                  value={[]}
+                  label={`${usersField?.label ?? "Assignees"}…`}
+                />
+              ) : null}
+              {tagApi ? (
+                <TagPicker api={tagApi} ids={[...selectedVisible]} value={[]} label="Tags…" />
+              ) : null}
+            </>
           }
         />
       ) : null}
@@ -603,6 +652,7 @@ export function DataView({
         />
       ) : null}
     </div>
+    </TagContext.Provider>
     </AssignContext.Provider>
   );
 }

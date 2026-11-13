@@ -152,9 +152,7 @@ export async function changeAssigneesAction(
   change: { add: number[]; remove: number[]; cascadeToTasks?: boolean },
 ): Promise<ActionResult & { cascaded?: number }> {
   await requireSignedIn();
-  if (entity !== "task" && entity !== "event") {
-    return { ok: false, error: "Only tasks and events have assignees." };
-  }
+  if (!isEntityType(entity)) return { ok: false, error: "Unknown record type." };
   const cleaned = cleanIds(ids);
   if (cleaned.length === 0) return { ok: false, error: "Nothing selected." };
   const { cascaded } = await changeAssignees(entity, cleaned, {

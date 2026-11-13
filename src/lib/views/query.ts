@@ -106,6 +106,7 @@ function matchesFilter(
     case "enum":
       return typeof value === "string" && selected.includes(value);
     case "users":
+    case "tags":
     case "relation": {
       const ids = refIds(value);
       return selected.some((choice) => {

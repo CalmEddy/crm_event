@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { connection } from "next/server";
 import { ActivityTimeline } from "@/components/activity-timeline";
 import { CustomFieldsPanel } from "@/components/custom-fields-panel";
+import { RecordMetaPanel } from "@/components/record-meta-panel";
+import { ContactDetails } from "@/components/contact-details";
 import { NotesPanel } from "@/components/notes-panel";
 import { RelatedLinksPanel } from "@/components/related-links-panel";
 import {
@@ -87,15 +89,8 @@ export default async function ContactDetailPage({
       />
 
       <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5 text-sm space-y-2">
-        <p>
-          <span className="text-[color:var(--muted)]">Email:</span>{" "}
-          {contact.email || "—"}
-        </p>
-        <p>
-          <span className="text-[color:var(--muted)]">Phone:</span>{" "}
-          {contact.phone || "—"}
-        </p>
-        <p>
+        <ContactDetails details={contact} />
+        <p className="pt-2">
           <span className="text-[color:var(--muted)]">Organization:</span>{" "}
           {org ? (
             <Link
@@ -162,6 +157,8 @@ export default async function ContactDetailPage({
           </ul>
         )}
       </Section>
+
+      <RecordMetaPanel entity="contact" id={id} />
 
       <CustomFieldsPanel entity="contact" id={id} />
 

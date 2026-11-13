@@ -162,7 +162,7 @@ async function userNames(ids: number[]) {
 
 /** Log people added to / removed from a task or event. */
 export async function logAssignees(
-  entity: "task" | "event",
+  entity: EntityType,
   id: number,
   added: number[],
   removed: number[] = [],

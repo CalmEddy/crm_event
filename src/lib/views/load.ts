@@ -5,6 +5,7 @@ import {
   events,
   getDb,
   organizations,
+  recordOwners,
   savedViews,
   taskAssignees,
   tasks,
@@ -12,6 +13,7 @@ import {
   type EntityType,
 } from "@/db";
 import { loadCustomValues } from "@/lib/custom-fields";
+import { loadRecordTags } from "@/lib/tags";
 import type { Ref, ViewRow } from "@/lib/views/fields";
 
 function toDate(value: Date | string | null) {
@@ -31,12 +33,33 @@ function groupRefs(rows: { ownerId: number; id: number; label: string }[]) {
 
 /** Rows for DataView, including custom field values (keys "cf_<id>"). */
 export async function loadViewRows(entity: EntityType): Promise<ViewRow[]> {
-  const [rows, custom] = await Promise.all([loadBaseRows(entity), loadCustomValues(entity)]);
-  if (custom.size === 0) return rows;
-  return rows.map((row) => {
-    const extra = custom.get(row.id);
-    return extra ? { ...row, values: { ...row.values, ...extra } } : row;
-  });
+  const hasOwners = entity === "contact" || entity === "organization";
+  const [rows, custom, tagMap, owners] = await Promise.all([
+    loadBaseRows(entity),
+    loadCustomValues(entity),
+    loadRecordTags(entity),
+    hasOwners ? loadOwners(entity) : Promise.resolve(new Map<number, Ref[]>()),
+  ]);
+  return rows.map((row) => ({
+    ...row,
+    values: {
+      ...row.values,
+      ...custom.get(row.id),
+      tags: tagMap.get(row.id) ?? [],
+      ...(hasOwners ? { owners: owners.get(row.id) ?? [] } : {}),
+    },
+  }));
+}
+
+async function loadOwners(entity: EntityType): Promise<Map<number, Ref[]>> {
+  const db = await getDb();
+  return groupRefs(
+    await db
+      .select({ ownerId: recordOwners.entityId, id: users.id, label: users.name })
+      .from(recordOwners)
+      .innerJoin(users, eq(recordOwners.userId, users.id))
+      .where(eq(recordOwners.entity, entity)),
+  );
 }
 
 async function loadBaseRows(entity: EntityType): Promise<ViewRow[]> {
@@ -116,6 +139,13 @@ async function loadBaseRows(entity: EntityType): Promise<ViewRow[]> {
             : null,
           email: contact.email,
           phone: contact.phone,
+          mobile: contact.mobile,
+          website: contact.website,
+          address: contact.address,
+          city: contact.city,
+          region: contact.region,
+          postalCode: contact.postalCode,
+          country: contact.country,
         },
       }));
     }
@@ -128,6 +158,12 @@ async function loadBaseRows(entity: EntityType): Promise<ViewRow[]> {
           type: org.type,
           city: org.city,
           address: org.address,
+          email: org.email,
+          phone: org.phone,
+          website: org.website,
+          region: org.region,
+          postalCode: org.postalCode,
+          country: org.country,
         },
       }));
     }

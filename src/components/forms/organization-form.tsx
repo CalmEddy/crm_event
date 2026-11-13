@@ -5,6 +5,9 @@ import {
 } from "@/components/ui";
 import { ORGANIZATION_TYPES, labelize } from "@/lib/constants";
 import type { Organization } from "@/db";
+import { ORGANIZATION_KEYS } from "@/lib/contact-info";
+import { ContactInfoFields } from "./contact-info-fields";
+
 
 export function OrganizationForm({
   action,
@@ -36,20 +39,7 @@ export function OrganizationForm({
           ))}
         </select>
       </Field>
-      <Field label="Address">
-        <input
-          className={inputClassName}
-          name="address"
-          defaultValue={organization?.address ?? ""}
-        />
-      </Field>
-      <Field label="City">
-        <input
-          className={inputClassName}
-          name="city"
-          defaultValue={organization?.city ?? ""}
-        />
-      </Field>
+      <ContactInfoFields keys={ORGANIZATION_KEYS} values={organization} />
       <Field label="Notes">
         <textarea
           className={inputClassName}

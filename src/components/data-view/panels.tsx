@@ -6,6 +6,7 @@ import type { EntityViewConfig, FieldDef, Ref, ViewRow } from "@/lib/views/field
 import { cellText } from "@/lib/views/query";
 import { AssigneeCell } from "./assignees";
 import { EditableCell, FieldInput } from "./editors";
+import { TagCell } from "./tags";
 
 /** Slide-over record editor: edit every field without leaving the list. */
 export function RecordDrawer({
@@ -75,6 +76,8 @@ export function RecordDrawer({
               <dd>
                 {field.type === "users" ? (
                   <AssigneeCell rowId={row.id} value={(row.values[field.key] as Ref[]) ?? []} />
+                ) : field.type === "tags" ? (
+                  <TagCell rowId={row.id} value={(row.values[field.key] as Ref[]) ?? []} />
                 ) : (
                 <EditableCell
                   field={field}

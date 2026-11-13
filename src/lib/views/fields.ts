@@ -14,6 +14,7 @@ export type FieldType =
   | "datetime"
   | "enum"
   | "users"
+  | "tags"
   | "relation";
 
 export type FieldOption = { value: string; label: string };
@@ -67,6 +68,7 @@ export const VIEW_CONFIGS: Record<EntityType, EntityViewConfig> = {
       { key: "status", label: "Status", type: "enum", options: opts(TASK_STATUSES), editable: true },
       { key: "kind", label: "Kind", type: "enum", options: opts(TASK_KINDS), editable: true },
       { key: "assignees", label: "Assignees", type: "users" },
+      { key: "tags", label: "Tags", type: "tags" },
       { key: "event", label: "Event", type: "relation", editable: true },
       { key: "contact", label: "Contact", type: "relation", hiddenByDefault: true, editable: true },
     ],
@@ -88,6 +90,7 @@ export const VIEW_CONFIGS: Record<EntityType, EntityViewConfig> = {
       { key: "location", label: "Location", type: "text", hiddenByDefault: true, editable: true },
       { key: "status", label: "Status", type: "enum", options: opts(EVENT_STATUSES), editable: true },
       { key: "assignees", label: "Assignees", type: "users" },
+      { key: "tags", label: "Tags", type: "tags" },
     ],
   },
   contact: {
@@ -104,6 +107,15 @@ export const VIEW_CONFIGS: Record<EntityType, EntityViewConfig> = {
       { key: "organization", label: "Organization", type: "relation", editable: true },
       { key: "email", label: "Email", type: "text", editable: true },
       { key: "phone", label: "Phone", type: "text", editable: true },
+      { key: "mobile", label: "Mobile", type: "text", hiddenByDefault: true, editable: true },
+      { key: "website", label: "Website", type: "text", hiddenByDefault: true, editable: true },
+      { key: "address", label: "Address", type: "text", hiddenByDefault: true, editable: true },
+      { key: "city", label: "City", type: "text", hiddenByDefault: true, editable: true },
+      { key: "region", label: "State / region", type: "text", hiddenByDefault: true, editable: true },
+      { key: "postalCode", label: "Postal code", type: "text", hiddenByDefault: true, editable: true },
+      { key: "country", label: "Country", type: "text", hiddenByDefault: true, editable: true },
+      { key: "owners", label: "Owners", type: "users" },
+      { key: "tags", label: "Tags", type: "tags" },
     ],
   },
   organization: {
@@ -119,7 +131,15 @@ export const VIEW_CONFIGS: Record<EntityType, EntityViewConfig> = {
       { key: "name", label: "Name", type: "text", editable: true },
       { key: "type", label: "Type", type: "enum", options: opts(ORGANIZATION_TYPES), editable: true },
       { key: "city", label: "City", type: "text", editable: true },
+      { key: "email", label: "Email", type: "text", editable: true },
+      { key: "phone", label: "Phone", type: "text", editable: true },
+      { key: "website", label: "Website", type: "text", hiddenByDefault: true, editable: true },
       { key: "address", label: "Address", type: "text", hiddenByDefault: true, editable: true },
+      { key: "region", label: "State / region", type: "text", hiddenByDefault: true, editable: true },
+      { key: "postalCode", label: "Postal code", type: "text", hiddenByDefault: true, editable: true },
+      { key: "country", label: "Country", type: "text", hiddenByDefault: true, editable: true },
+      { key: "owners", label: "Owners", type: "users" },
+      { key: "tags", label: "Tags", type: "tags" },
     ],
   },
 };
