@@ -547,6 +547,22 @@ export const dashboardLayouts = pgTable("dashboard_layouts", {
     .defaultNow(),
 });
 
+/** Append-only history: who changed what, shown as timelines and a feed. */
+export const activityLog = pgTable("activity_log", {
+  id: serial("id").primaryKey(),
+  entity: entityTypeEnum("entity").notNull(),
+  entityId: integer("entity_id").notNull(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+  /** created | updated | deleted | assigned | unassigned */
+  action: text("action").notNull(),
+  /** Record title at the time, so deleted records still read well. */
+  label: text("label").notNull().default(""),
+  detail: text("detail").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export type Organization = typeof organizations.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Event = typeof events.$inferSelect;
@@ -562,4 +578,5 @@ export type Note = typeof notes.$inferSelect;
 export type NoteLink = typeof noteLinks.$inferSelect;
 export type EntityLink = typeof entityLinks.$inferSelect;
 export type EntityType = (typeof entityTypeEnum.enumValues)[number];
+export type ActivityEntry = typeof activityLog.$inferSelect;
 export type SavedView = typeof savedViews.$inferSelect;

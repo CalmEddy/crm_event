@@ -1,5 +1,6 @@
 "use server";
 
+import { logAssignees, logCreated, logDeleted, logUpdated, snapshot } from "@/lib/activity";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -138,6 +139,8 @@ export async function createTask(formData: FormData) {
   const db = await getDb();
   const [row] = await db.insert(tasks).values(fields).returning();
   const { next, added } = await replaceTaskAssignees(row.id, assigneeIds);
+  await logCreated("task", row.id);
+  await logAssignees("task", row.id, added);
   await notifyTaskAssignees({
     task: row,
     assigneeIds: next,
@@ -154,6 +157,7 @@ export async function updateTask(id: number, formData: FormData) {
   const fields = readTaskFields(formData);
   const assigneeIds = readAssigneeIds(formData);
   const db = await getDb();
+  const before = await snapshot("task", id);
   // Only overwrite editable fields — preserve taskGroupId / taskTemplateId.
   const [row] = await db
     .update(tasks)
@@ -161,6 +165,8 @@ export async function updateTask(id: number, formData: FormData) {
     .where(eq(tasks.id, id))
     .returning();
   const { next, added } = await replaceTaskAssignees(id, assigneeIds);
+  await logUpdated("task", id, before);
+  await logAssignees("task", id, added);
   if (row) {
     await notifyTaskAssignees({
       task: row,
@@ -179,11 +185,13 @@ export async function updateTaskStatus(id: number, formData: FormData) {
   const status = String(formData.get("status") ?? "") as TaskStatus;
   if (!TASK_STATUSES.includes(status)) throw new Error("Invalid status");
   const db = await getDb();
+  const before = await snapshot("task", id);
   const [row] = await db
     .update(tasks)
     .set({ status, updatedAt: new Date() })
     .where(eq(tasks.id, id))
     .returning();
+  await logUpdated("task", id, before);
   if (row) {
     const assigneeIds = await listTaskAssigneeIds(id);
     await notifyTaskAssignees({
@@ -202,6 +210,7 @@ export async function deleteTask(id: number) {
   const [existing] = await db.select().from(tasks).where(eq(tasks.id, id));
   const assigneeIds = existing ? await listTaskAssigneeIds(id) : [];
   const [row] = await db.delete(tasks).where(eq(tasks.id, id)).returning();
+  if (existing) await logDeleted("task", id, existing);
   if (existing) {
     await notifyTaskAssignees({
       task: existing,

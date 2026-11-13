@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { connection } from "next/server";
+import { ActivityTimeline } from "@/components/activity-timeline";
 import { NotesPanel } from "@/components/notes-panel";
 import { RelatedLinksPanel } from "@/components/related-links-panel";
 import {
@@ -174,6 +175,8 @@ export default async function ContactDetailPage({
         links={related}
         options={options}
       />
+
+      <ActivityTimeline entity="contact" id={id} />
     </div>
   );
 }
