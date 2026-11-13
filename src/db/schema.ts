@@ -519,6 +519,23 @@ export const noteLinksRelations = relations(noteLinks, ({ one }) => ({
   }),
 }));
 
+export const savedViews = pgTable("saved_views", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  entity: entityTypeEnum("entity").notNull(),
+  name: text("name").notNull(),
+  query: text("query").notNull().default(""),
+  shared: boolean("shared").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export type Organization = typeof organizations.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Event = typeof events.$inferSelect;
@@ -534,3 +551,4 @@ export type Note = typeof notes.$inferSelect;
 export type NoteLink = typeof noteLinks.$inferSelect;
 export type EntityLink = typeof entityLinks.$inferSelect;
 export type EntityType = (typeof entityTypeEnum.enumValues)[number];
+export type SavedView = typeof savedViews.$inferSelect;
