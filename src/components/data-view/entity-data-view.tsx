@@ -2,14 +2,15 @@ import { Suspense } from "react";
 import type { EntityType } from "@/db";
 import { getCurrentUserId, listActiveUsers } from "@/lib/current-user";
 import { isEntityType, loadEntityOptions } from "@/lib/entities";
+import { loadEntityConfig } from "@/lib/custom-fields";
 import { VIEW_CONFIGS, type Ref } from "@/lib/views/fields";
 import { loadSavedViews, loadViewRows } from "@/lib/views/load";
 import { DataView } from "./data-view";
 
 /** Server wrapper: loads rows, saved views and choices, then hands off to the client view. */
 export async function EntityDataView({ entity }: { entity: EntityType }) {
-  const config = VIEW_CONFIGS[entity];
-  const [rows, currentUserId, activeUsers, entityOptions] = await Promise.all([
+  const [config, rows, currentUserId, activeUsers, entityOptions] = await Promise.all([
+    loadEntityConfig(entity),
     loadViewRows(entity),
     getCurrentUserId(),
     listActiveUsers(),
@@ -48,6 +49,7 @@ export async function EntityDataView({ entity }: { entity: EntityType }) {
         currentUserId={currentUserId}
         refOptions={refOptions}
         editOptions={editOptions}
+        customFields={config.fields.slice(VIEW_CONFIGS[entity].fields.length)}
       />
     </Suspense>
   );

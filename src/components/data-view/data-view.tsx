@@ -14,6 +14,7 @@ import {
 } from "@/lib/actions/views";
 import {
   VIEW_CONFIGS,
+  withCustomFields,
   type CellValue,
   type FieldDef,
   type Ref,
@@ -69,7 +70,10 @@ export function DataView({
   currentUserId,
   refOptions,
   editOptions,
+  customFields,
 }: {
+  /** User-defined fields appended to the built-in config. */
+  customFields?: FieldDef[];
   entity: EntityType;
   rows: ViewRow[];
   savedViews: SavedViewItem[];
@@ -79,7 +83,10 @@ export function DataView({
   /** Every choice for relation editors, keyed by field. */
   editOptions: Record<string, Ref[]>;
 }) {
-  const config = VIEW_CONFIGS[entity];
+  const config = useMemo(
+    () => withCustomFields(VIEW_CONFIGS[entity], customFields),
+    [entity, customFields],
+  );
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

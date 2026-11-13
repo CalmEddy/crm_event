@@ -24,7 +24,8 @@ import {
   parsePatch,
   updateRecords,
 } from "@/lib/records";
-import { VIEW_CONFIGS, isEditableField } from "@/lib/views/fields";
+import { splitCustomInput, writeCustomValues } from "@/lib/custom-fields";
+import { VIEW_CONFIGS, isCustomKey, isEditableField } from "@/lib/views/fields";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -69,11 +70,15 @@ export async function updateRecordsAction(
   if (!isEntityType(entity)) return { ok: false, error: "Unknown record type." };
   const cleaned = cleanIds(ids);
   if (cleaned.length === 0) return { ok: false, error: "Nothing selected." };
-  if (Object.keys(input).some((key) => !isEditableField(entity, key))) {
+  if (Object.keys(input).some((key) => !isCustomKey(key) && !isEditableField(entity, key))) {
     return { ok: false, error: "That field can't be edited here." };
   }
   try {
-    await updateRecords(entity, cleaned, parsePatch(entity, input));
+    const { standard, custom } = await splitCustomInput(entity, input);
+    if (Object.keys(standard).length) {
+      await updateRecords(entity, cleaned, parsePatch(entity, standard));
+    }
+    await writeCustomValues(entity, cleaned, custom);
   } catch (error) {
     return fail(error);
   }
@@ -104,7 +109,7 @@ export async function quickCreate(
   const config = VIEW_CONFIGS[entity];
   const base: Record<string, string | null> = {};
   for (const [key, value] of Object.entries(defaults)) {
-    if (isEditableField(entity, key) && key !== config.titleKey) base[key] = value;
+    if ((isCustomKey(key) || isEditableField(entity, key)) && key !== config.titleKey) base[key] = value;
   }
   base[config.titleKey] = title;
   if (entity === "task" && !base.dueOn) {
@@ -117,7 +122,9 @@ export async function quickCreate(
     base.startsAt = start.toISOString();
   }
   try {
-    const id = await insertRecord(entity, parsePatch(entity, base));
+    const { standard, custom } = await splitCustomInput(entity, base);
+    const id = await insertRecord(entity, parsePatch(entity, standard));
+    await writeCustomValues(entity, [id], custom);
     revalidateEntityPaths([{ type: entity, id }]);
     refresh();
     return { ok: true, id };

@@ -135,3 +135,12 @@ export function fieldByKey(config: EntityViewConfig, key: string) {
 export function isEditableField(entity: EntityType, key: string) {
   return Boolean(fieldByKey(VIEW_CONFIGS[entity], key)?.editable);
 }
+
+/** Custom field keys look like "cf_12" (12 = custom_fields.id). */
+export const CUSTOM_PREFIX = "cf_";
+export const isCustomKey = (key: string) => key.startsWith(CUSTOM_PREFIX);
+
+/** Built-in config plus the user-defined fields for that entity. */
+export function withCustomFields(config: EntityViewConfig, custom: FieldDef[] = []): EntityViewConfig {
+  return custom.length ? { ...config, fields: [...config.fields, ...custom] } : config;
+}
