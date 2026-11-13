@@ -34,7 +34,10 @@ export function UserForm({
           defaultValue={user?.email ?? ""}
         />
       </Field>
-      <Field label="Active" hint="Inactive users cannot be selected as current user or assignees.">
+      <Field
+        label="Active"
+        hint="Use a unique email. Your signed-in Cursor account is linked automatically on first visit."
+      >
         <select
           className={inputClassName}
           name="active"

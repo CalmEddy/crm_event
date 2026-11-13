@@ -11,6 +11,8 @@ export type AppDb =
   | ReturnType<typeof drizzlePglite<typeof schema>>;
 
 const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
+const migrateUrl =
+  process.env.DATABASE_URL_UNPOOLED?.trim() || databaseUrl;
 
 declare global {
   // eslint-disable-next-line no-var
@@ -19,6 +21,20 @@ declare global {
   var __crmPool: Pool | undefined;
   // eslint-disable-next-line no-var
   var __crmPglite: PGlite | undefined;
+}
+
+/** Split migration SQL into single statements (poolers often reject multi-statement queries). */
+function splitSqlStatements(sql: string): string[] {
+  return sql
+    .split(";")
+    .map((part) =>
+      part
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("--"))
+        .join("\n")
+        .trim(),
+    )
+    .filter((part) => part.length > 0);
 }
 
 async function applySqlMigrations(options: {
@@ -49,7 +65,9 @@ async function applySqlMigrations(options: {
   for (const file of files) {
     if (done.has(file)) continue;
     const sql = await readFile(path.join(migrationsDir, file), "utf8");
-    await options.exec(sql);
+    for (const statement of splitSqlStatements(sql)) {
+      await options.exec(statement);
+    }
     await options.query("insert into schema_migrations (name) values ($1)", [
       file,
     ]);
@@ -57,18 +75,27 @@ async function applySqlMigrations(options: {
 }
 
 async function createPostgresDb(): Promise<AppDb> {
+  // Prefer a direct (unpooled) URL for DDL when the platform provides one.
+  const migrationPool = new Pool({
+    connectionString: migrateUrl,
+    max: 1,
+  });
+  try {
+    await applySqlMigrations({
+      exec: async (sql) => {
+        await migrationPool.query(sql);
+      },
+      query: (sql, params) => migrationPool.query(sql, params),
+    });
+  } finally {
+    await migrationPool.end();
+  }
+
   globalThis.__crmPool ??= new Pool({
     connectionString: databaseUrl,
     max: 5,
   });
-  const pool = globalThis.__crmPool;
-  await applySqlMigrations({
-    exec: async (sql) => {
-      await pool.query(sql);
-    },
-    query: (sql, params) => pool.query(sql, params),
-  });
-  return drizzleNode(pool, { schema });
+  return drizzleNode(globalThis.__crmPool, { schema });
 }
 
 async function createPgliteDb(): Promise<AppDb> {
