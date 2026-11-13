@@ -2,12 +2,19 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useOptimistic, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import type { EntityType } from "@/db/schema";
-import { deleteView, saveView, updateField } from "@/lib/actions/views";
+import {
+  deleteRecordsAction,
+  deleteView,
+  quickCreate,
+  saveView,
+  updateRecordsAction,
+} from "@/lib/actions/views";
 import {
   VIEW_CONFIGS,
-
+  type CellValue,
+  type FieldDef,
   type Ref,
   type ViewRow,
 } from "@/lib/views/fields";
@@ -19,7 +26,16 @@ import {
   parseViewState,
   type ViewType,
 } from "@/lib/views/query";
+import { toCellValue, toWireValue } from "./editors";
+import { BulkBar, QuickAdd, RecordDrawer } from "./panels";
 import { BoardView, CalendarView, ListView, TableView } from "./views";
+
+type Patch =
+  | { kind: "set"; ids: number[]; values: Record<string, CellValue> }
+  | { kind: "remove"; ids: number[] };
+
+/** URL params that are UI state, not part of a saved view. */
+const TRANSIENT = ["sv", "open"];
 
 export type SavedViewItem = {
   id: number;
@@ -47,6 +63,7 @@ export function DataView({
   savedViews,
   currentUserId,
   refOptions,
+  editOptions,
 }: {
   entity: EntityType;
   rows: ViewRow[];
@@ -54,6 +71,8 @@ export function DataView({
   currentUserId: number | null;
   /** Choices for users/relation filters, keyed by field. */
   refOptions: Record<string, Ref[]>;
+  /** Every choice for relation editors, keyed by field. */
+  editOptions: Record<string, Ref[]>;
 }) {
   const config = VIEW_CONFIGS[entity];
   const router = useRouter();
@@ -68,13 +87,18 @@ export function DataView({
 
   const [optimisticRows, applyOptimistic] = useOptimistic(
     rows,
-    (current, patch: { id: number; key: string; value: string }) =>
-      current.map((row) =>
-        row.id === patch.id
-          ? { ...row, values: { ...row.values, [patch.key]: patch.value } }
-          : row,
-      ),
+    (current, patch: Patch) => {
+      const ids = new Set(patch.ids);
+      if (patch.kind === "remove") return current.filter((row) => !ids.has(row.id));
+      return current.map((row) =>
+        ids.has(row.id) ? { ...row, values: { ...row.values, ...patch.values } } : row,
+      );
+    },
   );
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const quickAddRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const openId = Number(searchParams.get("open")) || null;
 
   const visible = useMemo(
     () => applyViewState(optimisticRows, config, state, currentUserId),
@@ -85,6 +109,7 @@ export function DataView({
     const params = new URLSearchParams(searchParams.toString());
     mutate(params);
     params.delete("sv");
+    params.delete("open");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }
@@ -100,17 +125,118 @@ export function DataView({
     setParam(FILTER_PREFIX + key, values.length ? values.join(",") : null);
   }
 
-  function moveCard(id: number, key: string, value: string) {
+  const optionsFor = useCallback(
+    (field: FieldDef) => (field.type === "relation" ? (editOptions[field.key] ?? []) : []),
+    [editOptions],
+  );
+
+  function save(ids: number[], field: FieldDef, input: string) {
     setError(null);
     startTransition(async () => {
-      applyOptimistic({ id, key, value });
-      const result = await updateField(entity, id, key, value);
+      applyOptimistic({
+        kind: "set",
+        ids,
+        values: { [field.key]: toCellValue(field, input, optionsFor(field)) },
+      });
+      const result = await updateRecordsAction(entity, ids, {
+        [field.key]: toWireValue(field, input),
+      });
       if (!result.ok) setError(result.error);
     });
   }
 
+  function editRecord(id: number, field: FieldDef, input: string) {
+    save([id], field, input);
+  }
+
+  function moveCard(id: number, key: string, value: string) {
+    const field = config.fields.find((f) => f.key === key);
+    if (field) save([id], field, value);
+  }
+
+  function deleteSelected() {
+    const ids = [...selected];
+    setError(null);
+    startTransition(async () => {
+      applyOptimistic({ kind: "remove", ids });
+      setSelected(new Set());
+      const result = await deleteRecordsAction(entity, ids);
+      if (!result.ok) setError(result.error);
+    });
+  }
+
+  function onSelect(ids: number[], checked: boolean) {
+    setSelected((current) => {
+      const next = new Set(current);
+      for (const id of ids) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
+
+  // Filters with exactly one concrete value become defaults for quick-add.
+  const quickDefaults: Record<string, string> = {};
+  const quickLabels: string[] = [];
+  for (const [key, values] of Object.entries(state.filters)) {
+    const field = config.fields.find((f) => f.key === key);
+    if (!field?.editable || values.length !== 1) continue;
+    const [value] = values;
+    if (field.type === "enum") {
+      quickDefaults[key] = value;
+      quickLabels.push(`${field.label}: ${field.options?.find((o) => o.value === value)?.label ?? value}`);
+    } else if (field.type === "relation" && value !== "none") {
+      quickDefaults[key] = value;
+      quickLabels.push(`${field.label}: ${optionsFor(field).find((o) => String(o.id) === value)?.label ?? value}`);
+    }
+  }
+
+  async function createQuick(title: string) {
+    setError(null);
+    const result = await quickCreate(entity, title, quickDefaults);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    return true;
+  }
+
+  function setOpen(id: number | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (id) params.set("open", String(id));
+    else params.delete("open");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+  const closeDrawer = () => setOpen(null);
+  const openRow = openId ? optimisticRows.find((row) => row.id === openId) : undefined;
+
+  // Keyboard: "/" search, "n" new, Esc clears selection.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const target = event.target as HTMLElement;
+      if (target.closest("input,select,textarea,[contenteditable=true]") || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === "/") {
+        event.preventDefault();
+        searchRef.current?.focus();
+      } else if (event.key === "n" && quickAddRef.current) {
+        event.preventDefault();
+        quickAddRef.current.focus();
+      } else if (event.key === "Escape" && !openId) {
+        setSelected(new Set());
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openId]);
+
+  // Drop selections that are no longer visible (filters changed, rows deleted).
+  const visibleIds = new Set(visible.map((row) => row.id));
+  const selectedVisible = new Set([...selected].filter((id) => visibleIds.has(id)));
+
   const activeSavedId = searchParams.get("sv");
-  const hasState = [...searchParams.keys()].some((key) => key !== "sv");
+  const hasState = [...searchParams.keys()].some((key) => !TRANSIENT.includes(key));
   const filterFields = config.fields.filter(
     (field) =>
       field.type === "enum" ||
@@ -168,6 +294,7 @@ export function DataView({
           disabled={!hasState || Boolean(activeSavedId)}
           onSave={async (name, shared) => {
             const params = new URLSearchParams(searchParams.toString());
+            params.delete("open");
             const result = await saveView({
               entity,
               name,
@@ -214,6 +341,8 @@ export function DataView({
 
         <input
           type="search"
+          ref={searchRef}
+          title="Search (/)"
           placeholder={`Search ${config.pluralLabel.toLowerCase()}…`}
           defaultValue={state.q}
           key={state.q}
@@ -344,18 +473,19 @@ export function DataView({
         </p>
       ) : null}
 
-      {visible.length === 0 ? (
+      {visible.length === 0 && state.view !== "table" ? (
         <div className="rounded-xl border border-dashed border-[color:var(--line)] bg-[color:var(--panel)] px-6 py-10 text-center text-sm text-[color:var(--muted)]">
           No {config.pluralLabel.toLowerCase()} match this view.
         </div>
       ) : state.view === "list" ? (
-        <ListView config={config} rows={visible} group={state.group} />
+        <ListView config={config} rows={visible} group={state.group} onOpen={setOpen} />
       ) : state.view === "board" ? (
         <BoardView
           config={config}
           rows={visible}
           boardKey={state.board}
           onMove={moveCard}
+          onOpen={setOpen}
         />
       ) : state.view === "calendar" ? (
         <CalendarView
@@ -372,6 +502,21 @@ export function DataView({
           group={state.group}
           sortKey={state.sortKey}
           sortDir={state.sortDir}
+          handlers={{
+            options: optionsFor,
+            onEdit: editRecord,
+            onOpen: setOpen,
+            selected: selectedVisible,
+            onSelect,
+            quickAdd: (
+              <QuickAdd
+                config={config}
+                inputRef={quickAddRef}
+                defaultsLabel={quickLabels.join(", ")}
+                onCreate={createQuick}
+              />
+            ),
+          }}
           onSort={(key) => {
             const next =
               state.sortKey === key && state.sortDir === "asc" ? `-${key}` : key;
@@ -379,6 +524,26 @@ export function DataView({
           }}
         />
       )}
+      {selectedVisible.size > 0 && state.view === "table" ? (
+        <BulkBar
+          config={config}
+          count={selectedVisible.size}
+          options={optionsFor}
+          onApply={(field, input) => save([...selectedVisible], field, input)}
+          onDelete={deleteSelected}
+          onClear={() => setSelected(new Set())}
+        />
+      ) : null}
+
+      {openRow ? (
+        <RecordDrawer
+          config={config}
+          row={openRow}
+          options={optionsFor}
+          onEdit={editRecord}
+          onClose={closeDrawer}
+        />
+      ) : null}
     </div>
   );
 }

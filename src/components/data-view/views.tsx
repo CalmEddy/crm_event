@@ -24,6 +24,7 @@ import type {
   ViewRow,
 } from "@/lib/views/fields";
 import { cellText, groupKeys } from "@/lib/views/query";
+import { EditableCell } from "./editors";
 
 const RELATION_PATHS: Record<string, string> = {
   event: "/events",
@@ -120,16 +121,40 @@ function buildGroups(config: EntityViewConfig, rows: ViewRow[], group: string) {
     .map(([key, list]) => ({ key, label: groupLabel(field, key), rows: list }));
 }
 
-function TitleLink({ config, row }: { config: EntityViewConfig; row: ViewRow }) {
+function TitleLink({
+  config,
+  row,
+  onOpen,
+}: {
+  config: EntityViewConfig;
+  row: ViewRow;
+  onOpen?: (id: number) => void;
+}) {
+  const label = cellText(row.values[config.titleKey]) || `#${row.id}`;
+  const className =
+    "text-left font-medium text-[color:var(--ink)] hover:text-[color:var(--accent)] hover:underline";
+  if (onOpen) {
+    return (
+      <button type="button" className={className} onClick={() => onOpen(row.id)}>
+        {label}
+      </button>
+    );
+  }
   return (
-    <Link
-      href={`${config.basePath}/${row.id}`}
-      className="font-medium text-[color:var(--ink)] hover:text-[color:var(--accent)] hover:underline"
-    >
-      {cellText(row.values[config.titleKey]) || `#${row.id}`}
+    <Link href={`${config.basePath}/${row.id}`} className={className}>
+      {label}
     </Link>
   );
 }
+
+export type TableHandlers = {
+  options: (field: FieldDef) => Ref[];
+  onEdit: (id: number, field: FieldDef, input: string) => void;
+  onOpen: (id: number) => void;
+  selected: Set<number>;
+  onSelect: (ids: number[], checked: boolean) => void;
+  quickAdd?: React.ReactNode;
+};
 
 export function TableView({
   config,
@@ -139,6 +164,7 @@ export function TableView({
   sortKey,
   sortDir,
   onSort,
+  handlers,
 }: {
   config: EntityViewConfig;
   rows: ViewRow[];
@@ -147,16 +173,31 @@ export function TableView({
   sortKey: string;
   sortDir: "asc" | "desc";
   onSort: (key: string) => void;
+  handlers: TableHandlers;
 }) {
   const fields = cols
     .map((key) => config.fields.find((f) => f.key === key))
     .filter((f): f is FieldDef => Boolean(f));
   const groups = buildGroups(config, rows, group);
+  const allIds = rows.map((row) => row.id);
+  const allChecked = allIds.length > 0 && allIds.every((id) => handlers.selected.has(id));
+  const someChecked = !allChecked && allIds.some((id) => handlers.selected.has(id));
   return (
     <div className="overflow-x-auto rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)]">
       <table className="min-w-full text-left text-sm">
         <thead className="sticky top-0 border-b border-[color:var(--line)] bg-[color:var(--panel-soft)] text-[color:var(--muted)]">
           <tr>
+            <th className="w-10 px-3 py-2.5">
+              <input
+                type="checkbox"
+                aria-label="Select all"
+                checked={allChecked}
+                ref={(el) => {
+                  if (el) el.indeterminate = someChecked;
+                }}
+                onChange={(event) => handlers.onSelect(allIds, event.target.checked)}
+              />
+            </th>
             {fields.map((field) => (
               <th
                 key={field.key}
@@ -179,28 +220,78 @@ export function TableView({
             ))}
           </tr>
         </thead>
+        {handlers.quickAdd ? (
+          <tbody>
+            <tr className="border-b border-[color:var(--line)]">
+              <td />
+              <td colSpan={fields.length} className="px-4 py-2">
+                {handlers.quickAdd}
+              </td>
+            </tr>
+          </tbody>
+        ) : null}
         {groups.map((g) => (
           <tbody key={g.key}>
             {g.label ? (
               <tr className="bg-[color:var(--background)]">
-                <th colSpan={fields.length} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+                <th colSpan={fields.length + 1} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
                   {g.label} <span className="font-normal">({g.rows.length})</span>
                 </th>
               </tr>
             ) : null}
-            {g.rows.map((row) => (
-              <tr key={`${g.key}-${row.id}`} className="border-b border-[color:var(--line)] last:border-0 hover:bg-white">
-                {fields.map((field) => (
-                  <td key={field.key} className="px-4 py-2.5 align-top">
-                    {field.key === config.titleKey ? (
-                      <TitleLink config={config} row={row} />
-                    ) : (
-                      <Cell field={field} value={row.values[field.key]} />
-                    )}
+            {g.rows.map((row) => {
+              const checked = handlers.selected.has(row.id);
+              const title = cellText(row.values[config.titleKey]) || `#${row.id}`;
+              return (
+                <tr
+                  key={`${g.key}-${row.id}`}
+                  className={`border-b border-[color:var(--line)] last:border-0 ${
+                    checked ? "bg-[color:var(--panel-soft)]" : "hover:bg-white"
+                  }`}
+                >
+                  <td className="px-3 py-2 align-top">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${title}`}
+                      checked={checked}
+                      onChange={(event) => handlers.onSelect([row.id], event.target.checked)}
+                    />
                   </td>
-                ))}
-              </tr>
-            ))}
+                  {fields.map((field) => (
+                    <td key={field.key} className="px-4 py-2 align-top">
+                      {field.key === config.titleKey ? (
+                        <div className="flex items-start gap-1">
+                          <div className="flex-1">
+                            <EditableCell
+                              field={field}
+                              value={row.values[field.key]}
+                              options={[]}
+                              onSave={(input) => handlers.onEdit(row.id, field, input)}
+                              display={<span className="font-medium">{title}</span>}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handlers.onOpen(row.id)}
+                            className="shrink-0 rounded px-1.5 py-1 text-xs text-[color:var(--accent)] hover:bg-[color:var(--panel-soft)]"
+                            aria-label={`Open ${title}`}
+                          >
+                            Open
+                          </button>
+                        </div>
+                      ) : (
+                        <EditableCell
+                          field={field}
+                          value={row.values[field.key]}
+                          options={handlers.options(field)}
+                          onSave={(input) => handlers.onEdit(row.id, field, input)}
+                        />
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
           </tbody>
         ))}
       </table>
@@ -208,10 +299,18 @@ export function TableView({
   );
 }
 
-function CardBody({ config, row }: { config: EntityViewConfig; row: ViewRow }) {
+function CardBody({
+  config,
+  row,
+  onOpen,
+}: {
+  config: EntityViewConfig;
+  row: ViewRow;
+  onOpen?: (id: number) => void;
+}) {
   return (
     <>
-      <TitleLink config={config} row={row} />
+      <TitleLink config={config} row={row} onOpen={onOpen} />
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--muted)]">
         {config.subtitleKeys.map((key) => {
           const field = config.fields.find((f) => f.key === key);
@@ -234,10 +333,12 @@ export function ListView({
   config,
   rows,
   group,
+  onOpen,
 }: {
   config: EntityViewConfig;
   rows: ViewRow[];
   group: string;
+  onOpen?: (id: number) => void;
 }) {
   const groups = buildGroups(config, rows, group);
   return (
@@ -255,7 +356,7 @@ export function ListView({
               return (
                 <li key={`${g.key}-${row.id}`} className="flex items-start justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
-                    <CardBody config={config} row={row} />
+                    <CardBody config={config} row={row} onOpen={onOpen} />
                   </div>
                   {badgeField ? <Cell field={badgeField} value={row.values[badgeField.key]} /> : null}
                 </li>
@@ -273,11 +374,13 @@ export function BoardView({
   rows,
   boardKey,
   onMove,
+  onOpen,
 }: {
   config: EntityViewConfig;
   rows: ViewRow[];
   boardKey: string;
   onMove: (id: number, key: string, value: string) => void;
+  onOpen?: (id: number) => void;
 }) {
   const field = config.fields.find((f) => f.key === boardKey);
   const [dragOver, setDragOver] = useState<string | null>(null);
@@ -321,7 +424,7 @@ export function BoardView({
                     canEdit ? "cursor-grab active:cursor-grabbing" : ""
                   }`}
                 >
-                  <CardBody config={config} row={row} />
+                  <CardBody config={config} row={row} onOpen={onOpen} />
                   {canEdit ? (
                     <label className="mt-2 flex items-center gap-1 text-xs text-[color:var(--muted)]">
                       <span className="sr-only">Move to</span>

@@ -1,66 +1,169 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, ilike } from "drizzle-orm";
 import { refresh } from "next/cache";
+import { formatISO } from "date-fns";
 import { z } from "zod";
-import { events, getDb, organizations, savedViews, tasks } from "@/db";
+import {
+  contacts,
+  events,
+  getDb,
+  organizations,
+  savedViews,
+  tasks,
+  type EntityType,
+} from "@/db";
 import { requireSignedIn } from "@/lib/auth";
 import { getCurrentUserId } from "@/lib/current-user";
-import { isEntityType, revalidateEntityPaths } from "@/lib/entities";
-import { updateTaskStatus } from "@/lib/actions/tasks";
-import { fieldByKey, isEditableField, VIEW_CONFIGS } from "@/lib/views/fields";
+import { entityHref, isEntityType, revalidateEntityPaths } from "@/lib/entities";
+import {
+  FieldError,
+  deleteRecords,
+  insertRecord,
+  parsePatch,
+  updateRecords,
+} from "@/lib/records";
+import { VIEW_CONFIGS, isEditableField } from "@/lib/views/fields";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-/** Generic single-field update used by board drag (and later, inline editing). */
+const MAX_BULK = 200;
+
+function cleanIds(ids: unknown): number[] {
+  if (!Array.isArray(ids)) return [];
+  return [...new Set(ids.map(Number).filter((id) => Number.isInteger(id) && id > 0))].slice(
+    0,
+    MAX_BULK,
+  );
+}
+
+function isConstraintError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === "string" && code.startsWith("23")) return true;
+  return isConstraintError((error as { cause?: unknown }).cause);
+}
+
+function fail(error: unknown): ActionResult {
+  if (error instanceof FieldError) return { ok: false, error: error.message };
+  if (isConstraintError(error)) {
+    return { ok: false, error: "That change conflicts with existing data." };
+  }
+  throw error;
+}
+
+function done(entity: EntityType, ids: number[]): ActionResult {
+  revalidateEntityPaths(ids.map((id) => ({ type: entity, id })));
+  refresh();
+  return { ok: true };
+}
+
+/** Update one or more fields on one or more records (inline edit, drawer, bulk). */
+export async function updateRecordsAction(
+  entity: string,
+  ids: number[],
+  input: Record<string, string | null>,
+): Promise<ActionResult> {
+  await requireSignedIn();
+  if (!isEntityType(entity)) return { ok: false, error: "Unknown record type." };
+  const cleaned = cleanIds(ids);
+  if (cleaned.length === 0) return { ok: false, error: "Nothing selected." };
+  if (Object.keys(input).some((key) => !isEditableField(entity, key))) {
+    return { ok: false, error: "That field can't be edited here." };
+  }
+  try {
+    await updateRecords(entity, cleaned, parsePatch(entity, input));
+  } catch (error) {
+    return fail(error);
+  }
+  return done(entity, cleaned);
+}
+
+/** Kept for board drag: single enum field on one record. */
 export async function updateField(
   entity: string,
   id: number,
   key: string,
   value: string,
 ): Promise<ActionResult> {
+  return updateRecordsAction(entity, [id], { [key]: value });
+}
+
+/**
+ * Create a record from the quick-add row. `defaults` come from the current
+ * filter (e.g. status or event) and go through the same parsers as edits.
+ */
+export async function quickCreate(
+  entity: string,
+  title: string,
+  defaults: Record<string, string>,
+): Promise<ActionResult & { id?: number }> {
   await requireSignedIn();
-  if (!isEntityType(entity) || !isEditableField(entity, key)) {
-    return { ok: false, error: "That field can't be edited here." };
+  if (!isEntityType(entity)) return { ok: false, error: "Unknown record type." };
+  const config = VIEW_CONFIGS[entity];
+  const base: Record<string, string | null> = {};
+  for (const [key, value] of Object.entries(defaults)) {
+    if (isEditableField(entity, key) && key !== config.titleKey) base[key] = value;
   }
-  const field = fieldByKey(VIEW_CONFIGS[entity], key)!;
-  if (!field.options?.some((option) => option.value === value)) {
-    return { ok: false, error: "Invalid value." };
+  base[config.titleKey] = title;
+  if (entity === "task" && !base.dueOn) {
+    base.dueOn = formatISO(new Date(), { representation: "date" });
   }
-  if (!Number.isInteger(id) || id <= 0) {
-    return { ok: false, error: "Invalid record." };
+  if (entity === "event" && !base.startsAt) {
+    const start = new Date();
+    start.setDate(start.getDate() + 7);
+    start.setHours(20, 0, 0, 0);
+    base.startsAt = start.toISOString();
   }
+  try {
+    const id = await insertRecord(entity, parsePatch(entity, base));
+    revalidateEntityPaths([{ type: entity, id }]);
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
 
+export async function deleteRecordsAction(
+  entity: string,
+  ids: number[],
+): Promise<ActionResult> {
+  await requireSignedIn();
+  if (!isEntityType(entity)) return { ok: false, error: "Unknown record type." };
+  const cleaned = cleanIds(ids);
+  if (cleaned.length === 0) return { ok: false, error: "Nothing selected." };
+  await deleteRecords(entity, cleaned);
+  return done(entity, cleaned);
+}
+
+export type SearchHit = { type: EntityType; id: number; label: string; href: string };
+
+/** Command palette search across the four record types. */
+export async function searchRecords(query: string): Promise<SearchHit[]> {
+  await requireSignedIn();
+  const q = query.trim().slice(0, 80);
+  if (q.length < 2) return [];
+  const pattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
   const db = await getDb();
-  const now = new Date();
-
-  if (entity === "task" && key === "status") {
-    // Reuse the existing path so assignees get change notifications.
-    const formData = new FormData();
-    formData.set("status", value);
-    await updateTaskStatus(id, formData);
-  } else if (entity === "task" && key === "kind") {
-    await db
-      .update(tasks)
-      .set({ kind: value as typeof tasks.$inferInsert.kind, updatedAt: now })
-      .where(eq(tasks.id, id));
-  } else if (entity === "event" && key === "status") {
-    await db
-      .update(events)
-      .set({ status: value as typeof events.$inferInsert.status, updatedAt: now })
-      .where(eq(events.id, id));
-  } else if (entity === "organization" && key === "type") {
-    await db
-      .update(organizations)
-      .set({ type: value as typeof organizations.$inferInsert.type, updatedAt: now })
-      .where(eq(organizations.id, id));
-  } else {
-    return { ok: false, error: "That field can't be edited here." };
-  }
-
-  revalidateEntityPaths([{ type: entity, id }]);
-  refresh();
-  return { ok: true };
+  const [eventRows, taskRows, contactRows, orgRows] = await Promise.all([
+    db.select({ id: events.id, label: events.title }).from(events).where(ilike(events.title, pattern)).orderBy(asc(events.startsAt)).limit(6),
+    db.select({ id: tasks.id, label: tasks.title }).from(tasks).where(ilike(tasks.title, pattern)).orderBy(asc(tasks.dueOn)).limit(6),
+    db.select({ id: contacts.id, label: contacts.name }).from(contacts).where(ilike(contacts.name, pattern)).orderBy(asc(contacts.name)).limit(6),
+    db.select({ id: organizations.id, label: organizations.name }).from(organizations).where(ilike(organizations.name, pattern)).orderBy(asc(organizations.name)).limit(6),
+  ]);
+  const tag = (type: EntityType) => (row: { id: number; label: string }) => ({
+    type,
+    id: row.id,
+    label: row.label,
+    href: entityHref(type, row.id),
+  });
+  return [
+    ...eventRows.map(tag("event")),
+    ...taskRows.map(tag("task")),
+    ...contactRows.map(tag("contact")),
+    ...orgRows.map(tag("organization")),
+  ];
 }
 
 const saveViewSchema = z.object({
@@ -86,13 +189,13 @@ export async function saveView(input: {
     return { ok: false, error: "Your account isn't linked to a staff user." };
   }
   const query = new URLSearchParams(parsed.data.query);
-  query.delete("sv");
+  for (const transient of ["sv", "open"]) query.delete(transient);
   const db = await getDb();
   const [row] = await db
     .insert(savedViews)
     .values({
       userId,
-      entity: parsed.data.entity as (typeof savedViews.$inferInsert)["entity"],
+      entity: parsed.data.entity as EntityType,
       name: parsed.data.name,
       query: query.toString(),
       shared: parsed.data.shared,
