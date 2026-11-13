@@ -24,6 +24,7 @@ import type {
   ViewRow,
 } from "@/lib/views/fields";
 import { cellText, groupKeys } from "@/lib/views/query";
+import { AssigneeCell } from "./assignees";
 import { EditableCell } from "./editors";
 
 const RELATION_PATHS: Record<string, string> = {
@@ -279,6 +280,8 @@ export function TableView({
                             Open
                           </button>
                         </div>
+                      ) : field.type === "users" ? (
+                        <AssigneeCell rowId={row.id} value={(row.values[field.key] as Ref[]) ?? []} />
                       ) : (
                         <EditableCell
                           field={field}
@@ -299,7 +302,7 @@ export function TableView({
   );
 }
 
-function CardBody({
+export function CardBody({
   config,
   row,
   onOpen,
@@ -320,7 +323,11 @@ function CardBody({
           }
           return (
             <span key={key} className="inline-flex items-center">
-              <Cell field={field} value={value} />
+              {field.type === "users" ? (
+                <AssigneeCell rowId={row.id} value={value as Ref[]} />
+              ) : (
+                <Cell field={field} value={value} />
+              )}
             </span>
           );
         })}

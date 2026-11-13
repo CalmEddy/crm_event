@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import type { EntityType } from "@/db/schema";
 import {
+  changeAssigneesAction,
   deleteRecordsAction,
   deleteView,
   quickCreate,
@@ -26,13 +27,16 @@ import {
   parseViewState,
   type ViewType,
 } from "@/lib/views/query";
+import { AssignContext, AssigneePicker, type AssignApi } from "./assignees";
 import { toCellValue, toWireValue } from "./editors";
+import { WorkloadView } from "./workload";
 import { BulkBar, QuickAdd, RecordDrawer } from "./panels";
 import { BoardView, CalendarView, ListView, TableView } from "./views";
 
 type Patch =
   | { kind: "set"; ids: number[]; values: Record<string, CellValue> }
-  | { kind: "remove"; ids: number[] };
+  | { kind: "remove"; ids: number[] }
+  | { kind: "assign"; key: string; ids: number[]; add: Ref[]; remove: number[] };
 
 /** URL params that are UI state, not part of a saved view. */
 const TRANSIENT = ["sv", "open"];
@@ -90,6 +94,16 @@ export function DataView({
     (current, patch: Patch) => {
       const ids = new Set(patch.ids);
       if (patch.kind === "remove") return current.filter((row) => !ids.has(row.id));
+      if (patch.kind === "assign") {
+        const removing = new Set([...patch.remove, ...patch.add.map((u) => u.id)]);
+        return current.map((row) => {
+          if (!ids.has(row.id)) return row;
+          const existing = ((row.values[patch.key] as Ref[] | undefined) ?? []).filter(
+            (user) => !removing.has(user.id),
+          );
+          return { ...row, values: { ...row.values, [patch.key]: [...existing, ...patch.add] } };
+        });
+      }
       return current.map((row) =>
         ids.has(row.id) ? { ...row, values: { ...row.values, ...patch.values } } : row,
       );
@@ -144,6 +158,28 @@ export function DataView({
       if (!result.ok) setError(result.error);
     });
   }
+
+  const usersField = config.fields.find((f) => f.type === "users");
+  const assignApi: AssignApi | null =
+    usersField && (entity === "task" || entity === "event")
+      ? {
+          entity,
+          users: refOptions[usersField.key] ?? [],
+          currentUserId,
+          change: (ids, add, remove, cascadeToTasks) => {
+            setError(null);
+            startTransition(async () => {
+              applyOptimistic({ kind: "assign", key: usersField.key, ids, add, remove });
+              const result = await changeAssigneesAction(entity, ids, {
+                add: add.map((user) => user.id),
+                remove,
+                cascadeToTasks,
+              });
+              if (!result.ok) setError(result.error);
+            });
+          },
+        }
+      : null;
 
   function editRecord(id: number, field: FieldDef, input: string) {
     save([id], field, input);
@@ -251,6 +287,7 @@ export function DataView({
     : false;
 
   return (
+    <AssignContext.Provider value={assignApi}>
     <div className="space-y-4">
       {/* Saved view tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[color:var(--line)] pb-3">
@@ -401,10 +438,10 @@ export function DataView({
               className="rounded-md border border-[color:var(--line)] bg-white px-2 py-1.5 text-sm text-[color:var(--ink)]"
             >
               {config.fields
-                .filter((field) => field.type === "enum")
+                .filter((field) => field.type === "enum" || field.type === "users")
                 .map((field) => (
                   <option key={field.key} value={field.key}>
-                    {field.label}
+                    {field.type === "users" ? `${field.label} (workload)` : field.label}
                   </option>
                 ))}
             </select>
@@ -479,6 +516,8 @@ export function DataView({
         </div>
       ) : state.view === "list" ? (
         <ListView config={config} rows={visible} group={state.group} onOpen={setOpen} />
+      ) : state.view === "board" && config.fields.find((f) => f.key === state.board)?.type === "users" ? (
+        <WorkloadView config={config} rows={visible} usersKey={state.board} onOpen={setOpen} />
       ) : state.view === "board" ? (
         <BoardView
           config={config}
@@ -532,6 +571,16 @@ export function DataView({
           onApply={(field, input) => save([...selectedVisible], field, input)}
           onDelete={deleteSelected}
           onClear={() => setSelected(new Set())}
+          assignSlot={
+            assignApi ? (
+              <AssigneePicker
+                api={assignApi}
+                ids={[...selectedVisible]}
+                value={[]}
+                label="Assignees…"
+              />
+            ) : null
+          }
         />
       ) : null}
 
@@ -545,6 +594,7 @@ export function DataView({
         />
       ) : null}
     </div>
+    </AssignContext.Provider>
   );
 }
 
