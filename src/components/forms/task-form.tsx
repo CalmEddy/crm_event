@@ -1,9 +1,10 @@
+import { AssigneePicker } from "@/components/forms/assignee-picker";
 import {
   Field,
   SubmitButton,
   inputClassName,
 } from "@/components/ui";
-import type { Contact, Event, Task } from "@/db";
+import type { Contact, Event, Task, User } from "@/db";
 import {
   TASK_KINDS,
   TASK_STATUSES,
@@ -16,11 +17,22 @@ export function TaskForm({
   task,
   events,
   contacts,
+  users = [],
+  assigneeIds = [],
+  defaults,
 }: {
   action: (formData: FormData) => Promise<void>;
   task?: Task;
   events: Event[];
   contacts: Contact[];
+  users?: User[];
+  assigneeIds?: number[];
+  defaults?: {
+    eventId?: number | null;
+    contactId?: number | null;
+    title?: string;
+    dueOn?: string;
+  };
 }) {
   return (
     <form
@@ -32,7 +44,7 @@ export function TaskForm({
           className={inputClassName}
           name="title"
           required
-          defaultValue={task?.title ?? ""}
+          defaultValue={task?.title ?? defaults?.title ?? ""}
         />
       </Field>
       <Field label="Kind">
@@ -67,14 +79,23 @@ export function TaskForm({
           name="dueOn"
           type="date"
           required
-          defaultValue={toDateInputValue(task?.dueOn)}
+          defaultValue={
+            toDateInputValue(task?.dueOn) || defaults?.dueOn || ""
+          }
         />
       </Field>
-      <Field label="Event">
+      <Field
+        label="Event"
+        hint="Optional. Individual tasks do not require an event."
+      >
         <select
           className={inputClassName}
           name="eventId"
-          defaultValue={task?.eventId?.toString() ?? ""}
+          defaultValue={
+            task?.eventId?.toString() ??
+            defaults?.eventId?.toString() ??
+            ""
+          }
         >
           <option value="">None</option>
           {events.map((event) => (
@@ -88,7 +109,11 @@ export function TaskForm({
         <select
           className={inputClassName}
           name="contactId"
-          defaultValue={task?.contactId?.toString() ?? ""}
+          defaultValue={
+            task?.contactId?.toString() ??
+            defaults?.contactId?.toString() ??
+            ""
+          }
         >
           <option value="">None</option>
           {contacts.map((contact) => (
@@ -98,7 +123,7 @@ export function TaskForm({
           ))}
         </select>
       </Field>
-      <Field label="Notes">
+      <Field label="Profile notes">
         <textarea
           className={inputClassName}
           name="notes"
@@ -106,6 +131,7 @@ export function TaskForm({
           defaultValue={task?.notes ?? ""}
         />
       </Field>
+      <AssigneePicker users={users} selectedIds={assigneeIds} />
       <SubmitButton>{task ? "Save task" : "Create task"}</SubmitButton>
     </form>
   );

@@ -8,7 +8,8 @@ Comedy booking CRM for contacts, organizations, events, tasks, and **relative ta
 - Postgres + Drizzle ORM
 - SQL migrations in `migrations/`
 - Server Actions for CRUD
-- Single-agency v1 (no multi-tenant auth)
+- Private/team Cursor sign-in required (staff linked by signed-in email)
+- Outbound assignment / change / due-task emails via Resend
 
 Locally, if `DATABASE_URL` is unset, the app uses an on-disk [PGlite](https://pglite.dev/) database under `.data/pglite` so you can develop without Postgres.
 
@@ -19,9 +20,13 @@ Locally, if `DATABASE_URL` is unset, the app uses an on-disk [PGlite](https://pg
 | Organizations | venue / club / agency / promoter / other |
 | Contacts | people, optional org |
 | Events | start datetime, location, venue, status, notes |
-| Event links | contact and/or org with a role |
-| Tasks | kinds: travel, payment, call, email, follow_up, other · statuses: todo / doing / done / skipped |
+| Event links | contact and/or org with a booking role (buyer, performer, …) |
+| Tasks | create individually or from task groups; optional event/contact; kinds: travel, payment, call, email, follow_up, other · statuses: todo / doing / done / skipped |
 | Task groups + templates | reusable packs; each template has `offsetDays` relative to the event start date |
+| Users (staff) | name + email; assignable to events and tasks; Resend notifications |
+| Event / task assignees | many-to-many staff links; applying a task group copies event assignees onto new tasks |
+| Notes | first-class notes attachable to one or more contacts, orgs, events, or tasks |
+| Related records | CRM-style links between any of contact / organization / event / task |
 
 ### Relative task application
 
@@ -65,8 +70,9 @@ Published Cursor apps that declare a database get `DATABASE_URL` injected automa
 
 - Laugh Track Lounge (club) + Midwest Mirth Agency
 - Contacts: Dana Ortiz (buyer), Jules Park (comic), Sam Rivera (travel)
-- Event: Jules Park · Friday Late (~3 weeks out)
-- Task group **Standard booking**: −14 call, +2 email, +182 postcard (applied to the sample event)
+- Staff users: Alex Chen (booker), Morgan Blake (travel), Riley Quinn
+- Event: Jules Park · Friday Late (~3 weeks out), assigned to Alex + Morgan
+- Task group **Standard booking**: −14 call, +2 email, +182 postcard (applied to the sample event; tasks assigned to Alex + Morgan)
 
 ## Scripts
 
@@ -86,6 +92,37 @@ Published Cursor apps that declare a database get `DATABASE_URL` injected automa
 - **Contacts / Organizations** — list + detail
 - **Tasks** — filterable list
 - **Task groups** — editor with friendly offset controls
+- **Users** — staff directory; the signed-in Cursor account is linked to a staff row by email
+
+## Staff notifications (Resend outbound)
+
+Assignees receive email when they are newly assigned, when an assigned event/task changes (or is deleted), and via a daily due-task digest. The signed-in staff member is treated as the actor (self-notify skip + “Mine” filters).
+
+Set:
+
+| Variable | Purpose |
+| --- | --- |
+| `RESEND_API_KEY` | Same key used for inbound body fetch; also sends outbound mail |
+| `RESEND_FROM_EMAIL` | Verified sender, e.g. `Greenroom <bookings@yourdomain.com>` |
+| `APP_BASE_URL` | Absolute links in emails (default `http://localhost:3000`) |
+| `CRON_SECRET` | Protects the due-task cron route |
+
+If Resend outbound env is missing, mutations still succeed and rows are written to `notification_log` with a skip reason (local-friendly).
+
+### Due-task digest cron
+
+Call once per day (hosting scheduler / external cron):
+
+```bash
+curl -X POST "https://<your-greenroom-host>/api/cron/due-tasks" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Only the `Authorization: Bearer` header is accepted (no query-string secret).
+
+Open tasks (`todo` / `doing`) with `due_on <= today` are grouped per assignee. One digest per user per calendar day (`dedupe_key` prevents repeats).
+
+Greenroom pages and mutations require a signed-in Cursor viewer. `/api/inbound/email` and `/api/cron/due-tasks` use their own secrets (Svix / `CRON_SECRET`) instead.
 
 ## Email event intake (Resend Inbound)
 

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
+import { headers } from "next/headers";
 import { Nav } from "@/components/nav";
+import { getIdentity } from "../../cursor/identity";
 import "./globals.css";
 
 const display = Fraunces({
@@ -19,15 +21,32 @@ export const metadata: Metadata = {
     "Comedy booking CRM for contacts, organizations, events, and relative task groups.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const identity = await getIdentity(await headers());
+  const signedIn = identity.verified;
+
   return (
     <html
       lang="en"
       className={`${display.variable} ${body.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <Nav />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>
+        {signedIn ? <Nav /> : null}
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+          {signedIn ? (
+            children
+          ) : (
+            <div className="mx-auto max-w-lg py-16 text-center">
+              <h1 className="font-[family-name:var(--font-display)] text-3xl text-[color:var(--ink)]">
+                Sign in required
+              </h1>
+              <p className="mt-3 text-[color:var(--muted)]">
+                Greenroom is a private staff CRM. Sign in with Cursor to
+                continue.
+              </p>
+            </div>
+          )}
+        </main>
       </body>
     </html>
   );

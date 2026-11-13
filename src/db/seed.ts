@@ -2,19 +2,22 @@ import { count, eq } from "drizzle-orm";
 import { addDays, setHours, setMinutes } from "date-fns";
 import {
   contacts,
+  eventAssignees,
   eventContacts,
   events,
   getDb,
   organizations,
+  taskAssignees,
   taskGroupApplications,
   taskGroups,
   tasks,
   taskTemplates,
+  users,
 } from "@/db";
 import { dueOnFromEventDate } from "@/lib/offsets";
 
 export async function ensureSeedData() {
-  const db = await getDb();
+  const db = await getDb({ system: true });
   const [{ value: orgCount }] = await db
     .select({ value: count() })
     .from(organizations);
@@ -75,6 +78,38 @@ export async function ensureSeedData() {
       organizationId: agency.id,
     })
     .returning();
+
+  const [booker] = await db
+    .insert(users)
+    .values({
+      name: "Alex Chen",
+      email: "alex@midwestmirth.example",
+      active: true,
+    })
+    .returning();
+
+  const [travelStaff] = await db
+    .insert(users)
+    .values({
+      name: "Morgan Blake",
+      email: "morgan@midwestmirth.example",
+      active: true,
+    })
+    .returning();
+
+  await db.insert(users).values([
+    {
+      name: "Riley Quinn",
+      email: "riley@midwestmirth.example",
+      active: true,
+    },
+    {
+      // Matches local Cursor identity.dev simulated viewer email.
+      name: "Dev Viewer",
+      email: "dev@example.com",
+      active: true,
+    },
+  ]);
 
   const startsAt = setMinutes(setHours(addDays(new Date(), 21), 20), 0);
 
@@ -153,22 +188,37 @@ export async function ensureSeedData() {
     .from(taskTemplates)
     .where(eq(taskTemplates.taskGroupId, group.id));
 
-  await db.insert(tasks).values(
-    templates.map((template) => ({
-      title: template.title,
-      kind: template.kind,
-      dueOn: dueOnFromEventDate(event.startsAt, template.offsetDays),
-      status: "todo" as const,
-      eventId: event.id,
-      taskGroupId: group.id,
-      taskTemplateId: template.id,
-    })),
-  );
+  const createdTasks = await db
+    .insert(tasks)
+    .values(
+      templates.map((template) => ({
+        title: template.title,
+        kind: template.kind,
+        dueOn: dueOnFromEventDate(event.startsAt, template.offsetDays),
+        status: "todo" as const,
+        eventId: event.id,
+        taskGroupId: group.id,
+        taskTemplateId: template.id,
+      })),
+    )
+    .returning();
 
   await db.insert(taskGroupApplications).values({
     eventId: event.id,
     taskGroupId: group.id,
   });
+
+  await db.insert(eventAssignees).values([
+    { eventId: event.id, userId: booker.id },
+    { eventId: event.id, userId: travelStaff.id },
+  ]);
+
+  await db.insert(taskAssignees).values(
+    createdTasks.flatMap((task) => [
+      { taskId: task.id, userId: booker.id },
+      { taskId: task.id, userId: travelStaff.id },
+    ]),
+  );
 
   return { seeded: true as const, eventId: event.id };
 }

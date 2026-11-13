@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { connection } from "next/server";
+import { NotesPanel } from "@/components/notes-panel";
+import { RelatedLinksPanel } from "@/components/related-links-panel";
 import {
   Badge,
   ButtonLink,
@@ -17,10 +19,13 @@ import {
   events,
   getDb,
   organizations,
+  taskAssignees,
   taskGroupApplications,
   taskGroups,
   tasks,
+  users,
 } from "@/db";
+import { listEventAssigneeUsers } from "@/lib/assignees";
 import {
   addEventLink,
   deleteEvent,
@@ -36,6 +41,11 @@ import {
   TASK_STATUSES,
   labelize,
 } from "@/lib/constants";
+import {
+  loadEntityOptions,
+  loadNotesForEntity,
+  loadRelatedLinksForEntity,
+} from "@/lib/entities";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { formatOffsetLabel } from "@/lib/offsets";
 
@@ -96,6 +106,32 @@ export default async function EventDetailPage({
     .select()
     .from(organizations)
     .orderBy(asc(organizations.name));
+  const assigneeUsers = await listEventAssigneeUsers(id);
+
+  const taskIds = eventTasks.map((task) => task.id);
+  const taskAssigneeRows =
+    taskIds.length > 0
+      ? await db
+          .select({
+            taskId: taskAssignees.taskId,
+            userName: users.name,
+          })
+          .from(taskAssignees)
+          .innerJoin(users, eq(taskAssignees.userId, users.id))
+          .where(inArray(taskAssignees.taskId, taskIds))
+      : [];
+  const assigneesByTask = new Map<number, string[]>();
+  for (const row of taskAssigneeRows) {
+    const list = assigneesByTask.get(row.taskId) ?? [];
+    list.push(row.userName);
+    assigneesByTask.set(row.taskId, list);
+  }
+
+  const [options, noteRows, related] = await Promise.all([
+    loadEntityOptions(),
+    loadNotesForEntity({ type: "event", id }),
+    loadRelatedLinksForEntity({ type: "event", id }),
+  ]);
 
   return (
     <div className="space-y-10">
@@ -104,6 +140,7 @@ export default async function EventDetailPage({
         description={`${formatDateTime(event.startsAt)} · ${event.venue || event.location || "Venue TBD"}`}
         actions={
           <>
+            <ButtonLink href={`/tasks/new?eventId=${id}`}>Add task</ButtonLink>
             <ButtonLink href={`/events/${id}/edit`} variant="secondary">
               Edit
             </ButtonLink>
@@ -123,6 +160,12 @@ export default async function EventDetailPage({
             </Link>
           ) : null}
         </div>
+        <p className="text-sm text-[color:var(--muted)]">
+          Assignees:{" "}
+          {assigneeUsers.length > 0
+            ? assigneeUsers.map((user) => user.name).join(", ")
+            : "None — edit the event to assign staff."}
+        </p>
         <p className="whitespace-pre-wrap text-sm text-[color:var(--muted)]">
           {event.notes || "No notes."}
         </p>
@@ -244,9 +287,19 @@ export default async function EventDetailPage({
                   className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
-                    <div className="font-medium">{task.title}</div>
+                    <div className="font-medium">
+                      <Link
+                        href={`/tasks/${task.id}`}
+                        className="text-[color:var(--accent)]"
+                      >
+                        {task.title}
+                      </Link>
+                    </div>
                     <div className="text-sm text-[color:var(--muted)]">
                       {formatDate(task.dueOn)} · {labelize(task.kind)}
+                      {assigneesByTask.get(task.id)?.length
+                        ? ` · ${assigneesByTask.get(task.id)!.join(", ")}`
+                        : ""}
                     </div>
                   </div>
                   <form
@@ -315,6 +368,20 @@ export default async function EventDetailPage({
           </p>
         ) : null}
       </Section>
+
+      <NotesPanel
+        entityType="event"
+        entityId={id}
+        notes={noteRows}
+        options={options}
+      />
+
+      <RelatedLinksPanel
+        entityType="event"
+        entityId={id}
+        links={related}
+        options={options}
+      />
     </div>
   );
 }

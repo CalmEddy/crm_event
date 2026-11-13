@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { contacts, getDb } from "@/db";
+import { deletePolymorphicRefsForEntity } from "@/lib/entities";
+import { requireSignedIn } from "@/lib/auth";
 
 function readContactFields(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
@@ -28,6 +30,7 @@ function readContactFields(formData: FormData) {
 }
 
 export async function createContact(formData: FormData) {
+  await requireSignedIn();
   const fields = readContactFields(formData);
   const db = await getDb();
   const [row] = await db.insert(contacts).values(fields).returning();
@@ -36,6 +39,7 @@ export async function createContact(formData: FormData) {
 }
 
 export async function updateContact(id: number, formData: FormData) {
+  await requireSignedIn();
   const fields = readContactFields(formData);
   const db = await getDb();
   await db
@@ -48,8 +52,11 @@ export async function updateContact(id: number, formData: FormData) {
 }
 
 export async function deleteContact(id: number) {
+  await requireSignedIn();
+  await deletePolymorphicRefsForEntity({ type: "contact", id });
   const db = await getDb();
   await db.delete(contacts).where(eq(contacts.id, id));
   revalidatePath("/contacts");
+  revalidatePath("/notes");
   redirect("/contacts");
 }

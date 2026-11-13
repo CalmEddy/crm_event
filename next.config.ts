@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@electric-sql/pglite", "pg"],
+  allowedDevOrigins: ["127.0.0.1"],
   experimental: {
     serverActions: {
       // The Cursor apps gate proxies requests without forwarding the public

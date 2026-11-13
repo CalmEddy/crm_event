@@ -4,7 +4,21 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { eventContacts, events, getDb } from "@/db";
+import {
+  listEventAssigneeIds,
+  readAssigneeIds,
+  replaceEventAssignees,
+} from "@/lib/assignees";
 import { EVENT_STATUSES, type EventStatus } from "@/lib/constants";
+import { getCurrentUserId } from "@/lib/current-user";
+import { deletePolymorphicRefsForEntity } from "@/lib/entities";
+import {
+  eventAssignedMessage,
+  eventChangedMessage,
+  eventDeletedMessage,
+} from "@/lib/notifications/messages";
+import { notifyUsers } from "@/lib/notifications/notify";
+import { requireSignedIn } from "@/lib/auth";
 
 function readEventFields(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
@@ -20,7 +34,12 @@ function readEventFields(formData: FormData) {
   if (!startsAtRaw) throw new Error("Start date/time is required");
   if (!EVENT_STATUSES.includes(status)) throw new Error("Invalid status");
 
-  const startsAt = new Date(startsAtRaw);
+  // datetime-local yields "YYYY-MM-DDTHH:mm" (no timezone). Normalize so Node
+  // and hosted runtimes parse consistently.
+  const normalizedStartsAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(startsAtRaw)
+    ? `${startsAtRaw}:00`
+    : startsAtRaw;
+  const startsAt = new Date(normalizedStartsAt);
   if (Number.isNaN(startsAt.getTime())) throw new Error("Invalid start date");
 
   return {
@@ -37,22 +56,104 @@ function readEventFields(formData: FormData) {
   };
 }
 
+async function notifyEventAssignees(options: {
+  event: {
+    id: number;
+    title: string;
+    status: string;
+    startsAt: Date;
+  };
+  assigneeIds: number[];
+  addedIds?: number[];
+  action: "created" | "updated" | "deleted";
+}) {
+  const actorUserId = await getCurrentUserId();
+  const stamp = Date.now();
+
+  if (options.addedIds && options.addedIds.length > 0) {
+    const message = eventAssignedMessage(options.event);
+    await notifyUsers({
+      kind: "assignment",
+      entityType: "event",
+      entityId: options.event.id,
+      userIds: options.addedIds,
+      subject: message.subject,
+      body: message.body,
+      dedupeKeyPrefix: `assignment:event:${options.event.id}:${stamp}`,
+      actorUserId,
+    });
+  }
+
+  if (options.action === "created") {
+    // Assignment email above covers create-time assignees.
+    return;
+  }
+
+  if (options.action === "deleted") {
+    const message = eventDeletedMessage(options.event);
+    await notifyUsers({
+      kind: "record_change",
+      entityType: "event",
+      entityId: options.event.id,
+      userIds: options.assigneeIds,
+      subject: message.subject,
+      body: message.body,
+      dedupeKeyPrefix: `record_change:event:${options.event.id}:deleted:${stamp}`,
+      actorUserId,
+    });
+    return;
+  }
+
+  const message = eventChangedMessage(options.event, options.action);
+  await notifyUsers({
+    kind: "record_change",
+    entityType: "event",
+    entityId: options.event.id,
+    userIds: options.assigneeIds,
+    subject: message.subject,
+    body: message.body,
+    dedupeKeyPrefix: `record_change:event:${options.event.id}:${options.action}:${stamp}`,
+    actorUserId,
+  });
+}
+
 export async function createEvent(formData: FormData) {
+  await requireSignedIn();
   const fields = readEventFields(formData);
+  const assigneeIds = readAssigneeIds(formData);
   const db = await getDb();
   const [row] = await db.insert(events).values(fields).returning();
+  const { next, added } = await replaceEventAssignees(row.id, assigneeIds);
+  await notifyEventAssignees({
+    event: row,
+    assigneeIds: next,
+    addedIds: added,
+    action: "created",
+  });
   revalidatePath("/events");
   revalidatePath("/");
   redirect(`/events/${row.id}`);
 }
 
 export async function updateEvent(id: number, formData: FormData) {
+  await requireSignedIn();
   const fields = readEventFields(formData);
+  const assigneeIds = readAssigneeIds(formData);
   const db = await getDb();
-  await db
+  const [row] = await db
     .update(events)
     .set({ ...fields, updatedAt: new Date() })
-    .where(eq(events.id, id));
+    .where(eq(events.id, id))
+    .returning();
+  const { next, added } = await replaceEventAssignees(id, assigneeIds);
+  if (row) {
+    await notifyEventAssignees({
+      event: row,
+      assigneeIds: next,
+      addedIds: added,
+      action: "updated",
+    });
+  }
   revalidatePath("/events");
   revalidatePath(`/events/${id}`);
   revalidatePath("/");
@@ -60,14 +161,27 @@ export async function updateEvent(id: number, formData: FormData) {
 }
 
 export async function deleteEvent(id: number) {
+  await requireSignedIn();
+  await deletePolymorphicRefsForEntity({ type: "event", id });
   const db = await getDb();
+  const [existing] = await db.select().from(events).where(eq(events.id, id));
+  const assigneeIds = existing ? await listEventAssigneeIds(id) : [];
   await db.delete(events).where(eq(events.id, id));
+  if (existing) {
+    await notifyEventAssignees({
+      event: existing,
+      assigneeIds,
+      action: "deleted",
+    });
+  }
   revalidatePath("/events");
+  revalidatePath("/notes");
   revalidatePath("/");
   redirect("/events");
 }
 
 export async function addEventLink(eventId: number, formData: FormData) {
+  await requireSignedIn();
   const role = String(formData.get("role") ?? "contact").trim() || "contact";
   const notes = String(formData.get("notes") ?? "").trim() || null;
   const contactRaw = String(formData.get("contactId") ?? "").trim();
@@ -94,6 +208,7 @@ export async function addEventLink(eventId: number, formData: FormData) {
 }
 
 export async function removeEventLink(eventId: number, linkId: number) {
+  await requireSignedIn();
   const db = await getDb();
   await db
     .delete(eventContacts)

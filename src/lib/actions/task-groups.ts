@@ -11,7 +11,9 @@ import {
   tasks,
   taskTemplates,
 } from "@/db";
+import { copyEventAssigneesToTasks } from "@/lib/assignees";
 import { TASK_KINDS, type TaskKind } from "@/lib/constants";
+import { requireSignedIn } from "@/lib/auth";
 import {
   dueOnFromEventDate,
   toOffsetDays,
@@ -49,6 +51,7 @@ function readTemplateFields(formData: FormData) {
 }
 
 export async function createTaskGroup(formData: FormData) {
+  await requireSignedIn();
   const fields = readGroupFields(formData);
   const db = await getDb();
   const [row] = await db.insert(taskGroups).values(fields).returning();
@@ -57,6 +60,7 @@ export async function createTaskGroup(formData: FormData) {
 }
 
 export async function updateTaskGroup(id: number, formData: FormData) {
+  await requireSignedIn();
   const fields = readGroupFields(formData);
   const db = await getDb();
   await db
@@ -69,6 +73,7 @@ export async function updateTaskGroup(id: number, formData: FormData) {
 }
 
 export async function deleteTaskGroup(id: number) {
+  await requireSignedIn();
   const db = await getDb();
   await db.delete(taskGroups).where(eq(taskGroups.id, id));
   revalidatePath("/task-groups");
@@ -76,6 +81,7 @@ export async function deleteTaskGroup(id: number) {
 }
 
 export async function addTaskTemplate(groupId: number, formData: FormData) {
+  await requireSignedIn();
   const fields = readTemplateFields(formData);
   const db = await getDb();
   const existing = await db
@@ -103,6 +109,7 @@ export async function updateTaskTemplate(
   templateId: number,
   formData: FormData,
 ) {
+  await requireSignedIn();
   const fields = readTemplateFields(formData);
   const db = await getDb();
   await db
@@ -119,6 +126,7 @@ export async function updateTaskTemplate(
 }
 
 export async function deleteTaskTemplate(groupId: number, templateId: number) {
+  await requireSignedIn();
   const db = await getDb();
   await db
     .delete(taskTemplates)
@@ -133,6 +141,7 @@ export async function deleteTaskTemplate(groupId: number, templateId: number) {
 }
 
 export async function applyTaskGroupToEvent(eventId: number, formData: FormData) {
+  await requireSignedIn();
   const taskGroupId = Number(formData.get("taskGroupId"));
   const mode = String(formData.get("mode") ?? "block");
   if (!Number.isFinite(taskGroupId)) throw new Error("Pick a task group");
@@ -184,16 +193,23 @@ export async function applyTaskGroupToEvent(eventId: number, formData: FormData)
   );
 
   if (toCreate.length > 0) {
-    await db.insert(tasks).values(
-      toCreate.map((template) => ({
-        title: template.title,
-        kind: template.kind,
-        dueOn: dueOnFromEventDate(event.startsAt, template.offsetDays),
-        status: "todo" as const,
-        eventId,
-        taskGroupId,
-        taskTemplateId: template.id,
-      })),
+    const created = await db
+      .insert(tasks)
+      .values(
+        toCreate.map((template) => ({
+          title: template.title,
+          kind: template.kind,
+          dueOn: dueOnFromEventDate(event.startsAt, template.offsetDays),
+          status: "todo" as const,
+          eventId,
+          taskGroupId,
+          taskTemplateId: template.id,
+        })),
+      )
+      .returning();
+    await copyEventAssigneesToTasks(
+      eventId,
+      created.map((task) => task.id),
     );
   }
 
@@ -211,6 +227,7 @@ export async function applyTaskGroupToEvent(eventId: number, formData: FormData)
 }
 
 export async function recalculateOpenTasksFromTemplates(eventId: number) {
+  await requireSignedIn();
   const db = await getDb();
   const [event] = await db.select().from(events).where(eq(events.id, eventId));
   if (!event) throw new Error("Event not found");

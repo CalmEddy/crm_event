@@ -41,7 +41,7 @@ async function maybeApplyDefaultTaskGroup(eventId: number, startsAt: Date) {
   const taskGroupId = Number(raw);
   if (!Number.isFinite(taskGroupId) || taskGroupId <= 0) return;
 
-  const db = await getDb();
+  const db = await getDb({ system: true });
   const templates = await db
     .select()
     .from(taskTemplates)
@@ -77,7 +77,7 @@ async function maybeApplyDefaultTaskGroup(eventId: number, startsAt: Date) {
 export async function processInboundEmail(
   input: ProcessInboundInput,
 ): Promise<ProcessInboundResult> {
-  const db = await getDb();
+  const db = await getDb({ system: true });
 
   const [existing] = await db
     .select()
