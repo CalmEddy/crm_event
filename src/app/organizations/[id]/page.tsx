@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { connection } from "next/server";
 import { ActivityTimeline } from "@/components/activity-timeline";
 import { CustomFieldsPanel } from "@/components/custom-fields-panel";
+import { RecordMetaPanel } from "@/components/record-meta-panel";
+import { ContactDetails } from "@/components/contact-details";
 import { NotesPanel } from "@/components/notes-panel";
 import { RelatedLinksPanel } from "@/components/related-links-panel";
 import {
@@ -75,7 +77,7 @@ export default async function OrganizationDetailPage({
           <Badge>{labelize(org.type)}</Badge>
           {org.city ? <Badge>{org.city}</Badge> : null}
         </div>
-        {org.address ? <p>{org.address}</p> : null}
+        <ContactDetails details={org} />
         <p className="mt-3 whitespace-pre-wrap text-[color:var(--muted)]">
           {org.notes || "No profile notes."}
         </p>
@@ -128,6 +130,8 @@ export default async function OrganizationDetailPage({
           </ul>
         )}
       </Section>
+
+      <RecordMetaPanel entity="organization" id={id} />
 
       <CustomFieldsPanel entity="organization" id={id} />
 

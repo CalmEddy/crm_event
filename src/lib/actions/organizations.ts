@@ -8,18 +8,17 @@ import { getDb, organizations } from "@/db";
 import { ORGANIZATION_TYPES, type OrganizationType } from "@/lib/constants";
 import { deletePolymorphicRefsForEntity } from "@/lib/entities";
 import { requireSignedIn } from "@/lib/auth";
+import { ORGANIZATION_KEYS, readContactInfo } from "@/lib/contact-info";
 
 function readOrgFields(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const type = String(formData.get("type") ?? "other") as OrganizationType;
-  const address = String(formData.get("address") ?? "").trim() || null;
-  const city = String(formData.get("city") ?? "").trim() || null;
   const notes = String(formData.get("notes") ?? "").trim() || null;
 
   if (!name) throw new Error("Name is required");
   if (!ORGANIZATION_TYPES.includes(type)) throw new Error("Invalid type");
 
-  return { name, type, address, city, notes };
+  return { name, type, ...readContactInfo(formData, ORGANIZATION_KEYS), notes };
 }
 
 export async function createOrganization(formData: FormData) {

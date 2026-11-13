@@ -4,6 +4,9 @@ import {
   inputClassName,
 } from "@/components/ui";
 import type { Contact, Organization } from "@/db";
+import { CONTACT_KEYS } from "@/lib/contact-info";
+import { ContactInfoFields } from "./contact-info-fields";
+
 
 export function ContactForm({
   action,
@@ -27,21 +30,6 @@ export function ContactForm({
           defaultValue={contact?.name ?? ""}
         />
       </Field>
-      <Field label="Email">
-        <input
-          className={inputClassName}
-          name="email"
-          type="email"
-          defaultValue={contact?.email ?? ""}
-        />
-      </Field>
-      <Field label="Phone">
-        <input
-          className={inputClassName}
-          name="phone"
-          defaultValue={contact?.phone ?? ""}
-        />
-      </Field>
       <Field label="Role / title">
         <input
           className={inputClassName}
@@ -63,6 +51,7 @@ export function ContactForm({
           ))}
         </select>
       </Field>
+      <ContactInfoFields keys={CONTACT_KEYS} values={contact} />
       <Field label="Notes">
         <textarea
           className={inputClassName}

@@ -26,6 +26,7 @@ import type {
 import { cellText, groupKeys } from "@/lib/views/query";
 import { AssigneeCell } from "./assignees";
 import { EditableCell } from "./editors";
+import { TagCell, TagChips } from "./tags";
 
 const RELATION_PATHS: Record<string, string> = {
   event: "/events",
@@ -82,6 +83,8 @@ export function Cell({ field, value }: { field: FieldDef; value: CellValue | und
       );
     case "users":
       return <Avatars users={value as Ref[]} />;
+    case "tags":
+      return <TagChips value={value as Ref[]} />;
     case "relation": {
       const ref = value as Ref;
       const base = RELATION_PATHS[field.key];
@@ -282,6 +285,8 @@ export function TableView({
                         </div>
                       ) : field.type === "users" ? (
                         <AssigneeCell rowId={row.id} value={(row.values[field.key] as Ref[]) ?? []} />
+                      ) : field.type === "tags" ? (
+                        <TagCell rowId={row.id} value={(row.values[field.key] as Ref[]) ?? []} />
                       ) : (
                         <EditableCell
                           field={field}
@@ -325,6 +330,8 @@ export function CardBody({
             <span key={key} className="inline-flex items-center">
               {field.type === "users" ? (
                 <AssigneeCell rowId={row.id} value={value as Ref[]} />
+              ) : field.type === "tags" ? (
+                <TagCell rowId={row.id} value={value as Ref[]} />
               ) : (
                 <Cell field={field} value={value} />
               )}

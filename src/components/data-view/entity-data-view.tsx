@@ -3,18 +3,20 @@ import type { EntityType } from "@/db";
 import { getCurrentUserId, listActiveUsers } from "@/lib/current-user";
 import { isEntityType, loadEntityOptions } from "@/lib/entities";
 import { loadEntityConfig } from "@/lib/custom-fields";
+import { listTags } from "@/lib/tags";
 import { VIEW_CONFIGS, type Ref } from "@/lib/views/fields";
 import { loadSavedViews, loadViewRows } from "@/lib/views/load";
 import { DataView } from "./data-view";
 
 /** Server wrapper: loads rows, saved views and choices, then hands off to the client view. */
 export async function EntityDataView({ entity }: { entity: EntityType }) {
-  const [config, rows, currentUserId, activeUsers, entityOptions] = await Promise.all([
+  const [config, rows, currentUserId, activeUsers, entityOptions, tagOptions] = await Promise.all([
     loadEntityConfig(entity),
     loadViewRows(entity),
     getCurrentUserId(),
     listActiveUsers(),
     loadEntityOptions(),
+    listTags(),
   ]);
   const savedViews = await loadSavedViews(entity, currentUserId);
 
@@ -49,6 +51,7 @@ export async function EntityDataView({ entity }: { entity: EntityType }) {
         currentUserId={currentUserId}
         refOptions={refOptions}
         editOptions={editOptions}
+        tagOptions={tagOptions}
         customFields={config.fields.slice(VIEW_CONFIGS[entity].fields.length)}
       />
     </Suspense>

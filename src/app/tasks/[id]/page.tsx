@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { connection } from "next/server";
 import { ActivityTimeline } from "@/components/activity-timeline";
 import { CustomFieldsPanel } from "@/components/custom-fields-panel";
+import { RecordMetaPanel } from "@/components/record-meta-panel";
 import { NotesPanel } from "@/components/notes-panel";
 import { RelatedLinksPanel } from "@/components/related-links-panel";
 import {
@@ -124,6 +125,8 @@ export default async function TaskDetailPage({
           <SubmitButton variant="secondary">Update status</SubmitButton>
         </form>
       </div>
+
+      <RecordMetaPanel entity="task" id={id} />
 
       <CustomFieldsPanel entity="task" id={id} />
 

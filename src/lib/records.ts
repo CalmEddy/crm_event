@@ -7,6 +7,7 @@ import {
   events,
   getDb,
   organizations,
+  recordOwners,
   taskAssignees,
   tasks,
   users,
@@ -20,6 +21,7 @@ import {
   TASK_STATUSES,
 } from "@/lib/constants";
 import { logAssignees, logCreated, logDeleted, logUpdated, snapshot } from "@/lib/activity";
+import { EMAIL_RE, normalizeWebsite } from "@/lib/contact-info";
 import { getCurrentUserId } from "@/lib/current-user";
 import { deletePolymorphicRefsForEntity } from "@/lib/entities";
 import {
@@ -62,6 +64,19 @@ const ref: Parser = (raw) => {
   return id;
 };
 
+const email: Parser = (raw) => {
+  const value = optional(raw) as string | null;
+  if (value && !EMAIL_RE.test(value)) throw new FieldError("Enter a valid email address");
+  return value;
+};
+const website: Parser = (raw) => {
+  try {
+    return normalizeWebsite(optional(raw) as string | null);
+  } catch {
+    throw new FieldError("Enter a valid website");
+  }
+};
+
 /** Field key (as in VIEW_CONFIGS) -> DB column property + parser. */
 export const WRITABLE: Record<EntityType, Record<string, { column: string; parse: Parser }>> = {
   task: {
@@ -82,8 +97,15 @@ export const WRITABLE: Record<EntityType, Record<string, { column: string; parse
   contact: {
     name: { column: "name", parse: required("Name") },
     role: { column: "role", parse: optional },
-    email: { column: "email", parse: optional },
+    email: { column: "email", parse: email },
     phone: { column: "phone", parse: optional },
+    mobile: { column: "mobile", parse: optional },
+    website: { column: "website", parse: website },
+    address: { column: "address", parse: optional },
+    city: { column: "city", parse: optional },
+    region: { column: "region", parse: optional },
+    postalCode: { column: "postalCode", parse: optional },
+    country: { column: "country", parse: optional },
     organization: { column: "organizationId", parse: ref },
   },
   organization: {
@@ -91,6 +113,12 @@ export const WRITABLE: Record<EntityType, Record<string, { column: string; parse
     type: { column: "type", parse: oneOf(ORGANIZATION_TYPES) },
     city: { column: "city", parse: optional },
     address: { column: "address", parse: optional },
+    email: { column: "email", parse: email },
+    phone: { column: "phone", parse: optional },
+    website: { column: "website", parse: website },
+    region: { column: "region", parse: optional },
+    postalCode: { column: "postalCode", parse: optional },
+    country: { column: "country", parse: optional },
   },
 };
 
@@ -211,7 +239,7 @@ export type AssigneeChange = {
  * Returns how many open tasks were also updated when cascading from events.
  */
 export async function changeAssignees(
-  entity: "task" | "event",
+  entity: EntityType,
   ids: number[],
   change: AssigneeChange,
 ): Promise<{ cascaded: number }> {
@@ -224,6 +252,41 @@ export async function changeAssignees(
   const add = [...new Set(change.add)].filter((id) => activeIds.has(id));
   const remove = [...new Set(change.remove)];
   if (ids.length === 0 || (add.length === 0 && remove.length === 0)) {
+    return { cascaded: 0 };
+  }
+
+  if (entity === "contact" || entity === "organization") {
+    // Owners: no emails, just the link and an activity entry.
+    for (const id of ids) {
+      const before = new Set(
+        (
+          await db
+            .select({ userId: recordOwners.userId })
+            .from(recordOwners)
+            .where(and(eq(recordOwners.entity, entity), eq(recordOwners.entityId, id)))
+        ).map((row) => row.userId),
+      );
+      const added = add.filter((userId) => !before.has(userId));
+      const removed = remove.filter((userId) => before.has(userId));
+      await logAssignees(entity, id, added, removed);
+      if (removed.length) {
+        await db
+          .delete(recordOwners)
+          .where(
+            and(
+              eq(recordOwners.entity, entity),
+              eq(recordOwners.entityId, id),
+              inArray(recordOwners.userId, removed),
+            ),
+          );
+      }
+      if (added.length) {
+        await db
+          .insert(recordOwners)
+          .values(added.map((userId) => ({ entity, entityId: id, userId })))
+          .onConflictDoNothing();
+      }
+    }
     return { cascaded: 0 };
   }
 

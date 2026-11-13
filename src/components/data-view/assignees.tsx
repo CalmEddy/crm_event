@@ -1,11 +1,14 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import type { EntityType } from "@/db/schema";
 import type { Ref } from "@/lib/views/fields";
 import { Avatars } from "./views";
 
 export type AssignApi = {
-  entity: "task" | "event";
+  entity: EntityType;
+  /** What the people are called here, e.g. "Assignees" or "Owners". */
+  noun?: string;
   users: Ref[];
   currentUserId: number | null;
   change: (ids: number[], add: Ref[], remove: number[], cascadeToTasks: boolean) => void;
@@ -96,7 +99,7 @@ export function AssigneePicker({
         }}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={label ?? `Assignees: ${value.map((u) => u.label).join(", ") || "none"}. Change`}
+        aria-label={label ?? `${api.noun ?? "Assignees"}: ${value.map((u) => u.label).join(", ") || "none"}. Change`}
         className={
           bulk
             ? "rounded-md border border-[color:var(--line)] bg-white px-3 py-1 text-sm"
