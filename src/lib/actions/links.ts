@@ -3,6 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { entityLinks, getDb, type EntityType } from "@/db";
+import { requireSignedIn } from "@/lib/auth";
 import {
   ENTITY_LINK_ROLES,
   entityHref,
@@ -32,6 +33,7 @@ export async function createEntityLink(
   fromId: number,
   formData: FormData,
 ) {
+  await requireSignedIn();
   const from = parseRef(fromType, String(fromId));
   if (!from) throw new Error("Invalid source record");
 
@@ -89,6 +91,7 @@ export async function removeEntityLink(
   returnType: EntityType,
   returnId: number,
 ) {
+  await requireSignedIn();
   const db = await getDb();
   const [row] = await db
     .select()

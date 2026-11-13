@@ -8,7 +8,7 @@ Comedy booking CRM for contacts, organizations, events, tasks, and **relative ta
 - Postgres + Drizzle ORM
 - SQL migrations in `migrations/`
 - Server Actions for CRUD
-- Single-agency staff users (cookie “Act as” picker — not a security boundary)
+- Private/team Cursor sign-in required (staff linked by signed-in email)
 - Outbound assignment / change / due-task emails via Resend
 
 Locally, if `DATABASE_URL` is unset, the app uses an on-disk [PGlite](https://pglite.dev/) database under `.data/pglite` so you can develop without Postgres.
@@ -92,11 +92,11 @@ Published Cursor apps that declare a database get `DATABASE_URL` injected automa
 - **Contacts / Organizations** — list + detail
 - **Tasks** — filterable list
 - **Task groups** — editor with friendly offset controls
-- **Users** — staff directory; use **Act as** in the nav to set the current user cookie
+- **Users** — staff directory; the signed-in Cursor account is linked to a staff row by email
 
 ## Staff notifications (Resend outbound)
 
-Assignees receive email when they are newly assigned, when an assigned event/task changes (or is deleted), and via a daily due-task digest.
+Assignees receive email when they are newly assigned, when an assigned event/task changes (or is deleted), and via a daily due-task digest. The signed-in staff member is treated as the actor (self-notify skip + “Mine” filters).
 
 Set:
 
@@ -120,7 +120,7 @@ curl -X POST "https://<your-greenroom-host>/api/cron/due-tasks" \
 
 Open tasks (`todo` / `doing`) with `due_on <= today` are grouped per assignee. One digest per user per calendar day (`dedupe_key` prevents repeats).
 
-The **Act as** picker is for attribution (skip self-notify) and “Mine” task filters — it is not login security.
+Greenroom pages and mutations require a signed-in Cursor viewer. `/api/inbound/email` and `/api/cron/due-tasks` use their own secrets (Svix / `CRON_SECRET`) instead.
 
 ## Email event intake (Resend Inbound)
 

@@ -97,11 +97,19 @@ export async function ensureSeedData() {
     })
     .returning();
 
-  await db.insert(users).values({
-    name: "Riley Quinn",
-    email: "riley@midwestmirth.example",
-    active: true,
-  });
+  await db.insert(users).values([
+    {
+      name: "Riley Quinn",
+      email: "riley@midwestmirth.example",
+      active: true,
+    },
+    {
+      // Matches local Cursor identity.dev simulated viewer email.
+      name: "Dev Viewer",
+      email: "dev@example.com",
+      active: true,
+    },
+  ]);
 
   const startsAt = setMinutes(setHours(addDays(new Date(), 21), 20), 0);
 
