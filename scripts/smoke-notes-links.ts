@@ -12,7 +12,7 @@ import {
 import { normalizeEntityPair } from "../src/lib/entities";
 
 async function main() {
-  const db = await getDb();
+  const db = await getDb({ system: true });
   const [event] = await db.select().from(events).limit(1);
   const [contact] = await db.select().from(contacts).limit(1);
   const [org] = await db.select().from(organizations).limit(1);

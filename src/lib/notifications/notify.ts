@@ -19,7 +19,7 @@ export async function notifyUsers(options: {
   );
   if (uniqueIds.length === 0) return { sent: 0, skipped: 0 };
 
-  const db = await getDb();
+  const db = await getDb({ system: true });
   const recipients = await db
     .select()
     .from(users)

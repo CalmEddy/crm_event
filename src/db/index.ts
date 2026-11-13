@@ -88,7 +88,19 @@ async function createPgliteDb(): Promise<AppDb> {
   return drizzlePglite(client, { schema });
 }
 
-export async function getDb(): Promise<AppDb> {
+export type GetDbOptions = {
+  /**
+   * Skip Cursor viewer check. Use only for trusted system paths
+   * (inbound webhook, cron, seed, notify after auth already verified).
+   */
+  system?: boolean;
+};
+
+export async function getDb(options?: GetDbOptions): Promise<AppDb> {
+  if (!options?.system) {
+    const { requireSignedIn } = await import("@/lib/auth");
+    await requireSignedIn();
+  }
   if (!globalThis.__crmDbPromise) {
     globalThis.__crmDbPromise = (
       databaseUrl !== "" ? createPostgresDb() : createPgliteDb()

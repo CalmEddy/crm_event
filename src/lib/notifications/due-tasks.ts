@@ -14,7 +14,7 @@ import { appBaseUrl } from "@/lib/notifications/resend-send";
 
 export async function sendDueTaskDigests(now = new Date()) {
   const today = formatISO(now, { representation: "date" });
-  const db = await getDb();
+  const db = await getDb({ system: true });
 
   const dueTasks = await db
     .select({
