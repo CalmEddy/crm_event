@@ -88,7 +88,7 @@ export async function sendDueTaskDigests(now = new Date()) {
       lines.push("");
     }
 
-    lines.push(`Open tasks: ${appBaseUrl()}/tasks?assigneeId=mine`);
+    lines.push(`Open tasks: ${appBaseUrl()}/tasks?f.assignees=me`);
 
     const result = await notifyUsers({
       kind: "task_due",
