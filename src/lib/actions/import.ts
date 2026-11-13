@@ -6,7 +6,8 @@ import { requireSignedIn } from "@/lib/auth";
 import { parseCsv } from "@/lib/csv";
 import { isEntityType, revalidateEntityPaths } from "@/lib/entities";
 import { FieldError, insertRecord, parsePatch } from "@/lib/records";
-import { VIEW_CONFIGS, isEditableField } from "@/lib/views/fields";
+import { loadEntityConfig, splitCustomInput, writeCustomValues } from "@/lib/custom-fields";
+import { isCustomKey, isEditableField } from "@/lib/views/fields";
 
 const MAX_ROWS = 500;
 
@@ -25,14 +26,14 @@ export async function importCsv(entity: string, text: string): Promise<ImportRes
   await requireSignedIn();
   if (!isEntityType(entity)) return { ok: false, error: "Unknown record type." };
   if (text.length > 2_000_000) return { ok: false, error: "File is too large (2 MB max)." };
-  const config = VIEW_CONFIGS[entity];
+  const config = await loadEntityConfig(entity);
   const [header, ...body] = parseCsv(text);
   if (!header || body.length === 0) return { ok: false, error: "The file has no data rows." };
   if (body.length > MAX_ROWS) return { ok: false, error: `Import at most ${MAX_ROWS} rows at a time.` };
 
   const columns = header.map((name) =>
     config.fields.find(
-      (f) => isEditableField(entity, f.key) && (norm(f.label) === norm(name) || norm(f.key) === norm(name)),
+      (f) => (isCustomKey(f.key) || isEditableField(entity, f.key)) && (norm(f.label) === norm(name) || norm(f.key) === norm(name)),
     ),
   );
   if (!columns.some((f) => f?.key === config.titleKey)) {
@@ -74,7 +75,9 @@ export async function importCsv(entity: string, text: string): Promise<ImportRes
           input[field.key] = field.type === "datetime" ? new Date(raw).toISOString() : raw;
         }
       });
-      const id = await insertRecord(entity, parsePatch(entity, input));
+      const { standard, custom } = await splitCustomInput(entity, input);
+      const id = await insertRecord(entity, parsePatch(entity, standard));
+      await writeCustomValues(entity, [id], custom);
       ids.push(id);
       created++;
     } catch (error) {

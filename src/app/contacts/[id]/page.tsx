@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { connection } from "next/server";
 import { ActivityTimeline } from "@/components/activity-timeline";
+import { CustomFieldsPanel } from "@/components/custom-fields-panel";
 import { NotesPanel } from "@/components/notes-panel";
 import { RelatedLinksPanel } from "@/components/related-links-panel";
 import {
@@ -161,6 +162,8 @@ export default async function ContactDetailPage({
           </ul>
         )}
       </Section>
+
+      <CustomFieldsPanel entity="contact" id={id} />
 
       <NotesPanel
         entityType="contact"

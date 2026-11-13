@@ -10,7 +10,7 @@ import { EVENT_STATUSES, labelize } from "@/lib/constants";
 import type { DashboardWidget, KpiMetric } from "@/lib/dashboard/widgets";
 import { entityHref } from "@/lib/entities";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { VIEW_CONFIGS } from "@/lib/views/fields";
+import { loadEntityConfig } from "@/lib/custom-fields";
 import { loadViewRows } from "@/lib/views/load";
 import { applyViewState, cellText, parseViewState } from "@/lib/views/query";
 
@@ -283,7 +283,7 @@ async function SavedViewWidget({
   if (!view || (!view.shared && view.userId !== userId)) {
     return <Empty>This saved view no longer exists.</Empty>;
   }
-  const config = VIEW_CONFIGS[view.entity];
+  const config = await loadEntityConfig(view.entity);
   const state = parseViewState(new URLSearchParams(view.query), config);
   const all = applyViewState(await loadViewRows(view.entity), config, state, userId);
   const rows = all.slice(0, limit);

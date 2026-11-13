@@ -11,6 +11,7 @@ const links = [
   { href: "/notes", label: "Notes" },
   { href: "/task-groups", label: "Task groups" },
   { href: "/users", label: "Users" },
+  { href: "/settings/fields", label: "Fields" },
 ];
 
 export async function Nav() {

@@ -5,6 +5,7 @@ import {
   integer,
   pgEnum,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
@@ -563,6 +564,34 @@ export const activityLog = pgTable("activity_log", {
     .defaultNow(),
 });
 
+/** User-defined fields per record type (see src/lib/custom-fields.ts). */
+export const customFields = pgTable("custom_fields", {
+  id: serial("id").primaryKey(),
+  entity: entityTypeEnum("entity").notNull(),
+  label: text("label").notNull(),
+  /** text | number | date | select | checkbox */
+  type: text("type").notNull(),
+  /** Select choices, one per line. */
+  options: text("options").notNull().default(""),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const customValues = pgTable(
+  "custom_values",
+  {
+    fieldId: integer("field_id")
+      .notNull()
+      .references(() => customFields.id, { onDelete: "cascade" }),
+    entity: entityTypeEnum("entity").notNull(),
+    entityId: integer("entity_id").notNull(),
+    value: text("value").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.fieldId, table.entityId] })],
+);
+
 export type Organization = typeof organizations.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Event = typeof events.$inferSelect;
@@ -579,4 +608,5 @@ export type NoteLink = typeof noteLinks.$inferSelect;
 export type EntityLink = typeof entityLinks.$inferSelect;
 export type EntityType = (typeof entityTypeEnum.enumValues)[number];
 export type ActivityEntry = typeof activityLog.$inferSelect;
+export type CustomField = typeof customFields.$inferSelect;
 export type SavedView = typeof savedViews.$inferSelect;

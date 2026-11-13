@@ -11,6 +11,7 @@ import {
   users,
   type EntityType,
 } from "@/db";
+import { loadCustomValues } from "@/lib/custom-fields";
 import type { Ref, ViewRow } from "@/lib/views/fields";
 
 function toDate(value: Date | string | null) {
@@ -28,7 +29,17 @@ function groupRefs(rows: { ownerId: number; id: number; label: string }[]) {
   return map;
 }
 
+/** Rows for DataView, including custom field values (keys "cf_<id>"). */
 export async function loadViewRows(entity: EntityType): Promise<ViewRow[]> {
+  const [rows, custom] = await Promise.all([loadBaseRows(entity), loadCustomValues(entity)]);
+  if (custom.size === 0) return rows;
+  return rows.map((row) => {
+    const extra = custom.get(row.id);
+    return extra ? { ...row, values: { ...row.values, ...extra } } : row;
+  });
+}
+
+async function loadBaseRows(entity: EntityType): Promise<ViewRow[]> {
   const db = await getDb();
   switch (entity) {
     case "task": {

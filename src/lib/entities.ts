@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
   contacts,
+  customValues,
   entityLinks,
   events,
   getDb,
@@ -263,6 +264,10 @@ export async function loadRelatedLinksForEntity(
 
 export async function deletePolymorphicRefsForEntity(ref: EntityRef) {
   const db = await getDb();
+
+  await db
+    .delete(customValues)
+    .where(and(eq(customValues.entity, ref.type), eq(customValues.entityId, ref.id)));
 
   const linkedNotes = await db
     .select({ noteId: noteLinks.noteId })
