@@ -2,6 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@electric-sql/pglite", "pg"],
+  experimental: {
+    serverActions: {
+      // The Cursor apps gate proxies requests without forwarding the public
+      // host, so Server Actions reject the browser's Origin as cross-site.
+      allowedOrigins: ["greenroom.apps.grok.bot"],
+    },
+  },
   turbopack: {
     rules: {
       "*.css": {
