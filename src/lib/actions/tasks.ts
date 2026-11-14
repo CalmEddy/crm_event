@@ -2,7 +2,7 @@
 
 import { logAssignees, logCreated, logDeleted, logUpdated, snapshot } from "@/lib/activity";
 import { eq } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { events, getDb, tasks } from "@/db";
 import {
@@ -201,6 +201,8 @@ export async function updateTaskStatus(id: number, formData: FormData) {
     });
   }
   revalidateTaskPaths(row?.eventId, id);
+  // Re-render whichever page the status was changed from (contact, org, …).
+  refresh();
 }
 
 export async function deleteTask(id: number) {

@@ -1,7 +1,9 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
+import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
+import { quickCreate } from "@/lib/actions/views";
 import { entityLinks, getDb, type EntityType } from "@/db";
 import { requireSignedIn } from "@/lib/auth";
 import {
@@ -109,4 +111,56 @@ export async function removeEntityLink(
   }
 
   redirect(entityHref(returnType, returnId));
+}
+
+export type LinkTarget =
+  | { type: EntityType; id: number }
+  | { type: EntityType; create: string };
+
+/**
+ * Type-ahead linking: link to an existing record, or create a new one (with
+ * the same defaults as quick-add) and link it, without leaving the page.
+ */
+export async function linkRecordAction(
+  fromType: EntityType,
+  fromId: number,
+  target: LinkTarget,
+  input: { role?: string; notes?: string } = {},
+): Promise<{ ok: true; href: string; created: boolean } | { ok: false; error: string }> {
+  await requireSignedIn();
+  const from = parseRef(fromType, String(fromId));
+  if (!from) return { ok: false, error: "Invalid source record." };
+  if (!isEntityType(target.type)) return { ok: false, error: "Unknown record type." };
+
+  let to: EntityRef;
+  let created = false;
+  if ("create" in target) {
+    const title = String(target.create ?? "").trim().slice(0, 200);
+    if (!title) return { ok: false, error: "Type a name first." };
+    const result = await quickCreate(target.type, title, {});
+    if (!result.ok || !result.id) return { ok: false, error: result.ok ? "Couldn't create it." : result.error };
+    to = { type: target.type, id: result.id };
+    created = true;
+  } else {
+    const parsed = parseRef(target.type, String(target.id));
+    if (!parsed) return { ok: false, error: "Pick a record to link." };
+    to = parsed;
+  }
+  if (from.type === to.type && from.id === to.id) {
+    return { ok: false, error: "A record can't be linked to itself." };
+  }
+
+  const role = (ENTITY_LINK_ROLES as readonly string[]).includes(input.role ?? "")
+    ? (input.role as string)
+    : "related";
+  const notes = String(input.notes ?? "").trim().slice(0, 500) || null;
+  const [left, right] = normalizeEntityPair(from, to);
+  const db = await getDb();
+  await db
+    .insert(entityLinks)
+    .values({ leftType: left.type, leftId: left.id, rightType: right.type, rightId: right.id, role, notes })
+    .onConflictDoNothing();
+  revalidateEntityPaths([from, to]);
+  refresh();
+  return { ok: true, href: entityHref(to.type, to.id), created };
 }

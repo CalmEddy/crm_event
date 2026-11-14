@@ -1,18 +1,18 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { connection } from "next/server";
 import { ActivityTimeline } from "@/components/activity-timeline";
+import { AddDialog } from "@/components/add-dialog";
 import { CustomFieldsPanel } from "@/components/custom-fields-panel";
-import { RecordMetaPanel } from "@/components/record-meta-panel";
 import { NotesPanel } from "@/components/notes-panel";
+import { RecordMetaPanel } from "@/components/record-meta-panel";
+import { BadgeLink, RecordSummary, TaskListSection } from "@/components/record-page";
 import { RelatedLinksPanel } from "@/components/related-links-panel";
 import {
   Badge,
   ButtonLink,
   Field,
   PageHeader,
-  Section,
   SubmitButton,
   inputClassName,
 } from "@/components/ui";
@@ -22,34 +22,22 @@ import {
   events,
   getDb,
   organizations,
-  taskAssignees,
   taskGroupApplications,
   taskGroups,
   tasks,
-  users,
 } from "@/db";
-import { listEventAssigneeUsers } from "@/lib/assignees";
-import {
-  addEventLink,
-  deleteEvent,
-  removeEventLink,
-} from "@/lib/actions/events";
+import { deleteEvent, removeEventLink } from "@/lib/actions/events";
 import {
   applyTaskGroupToEvent,
   recalculateOpenTasksFromTemplates,
 } from "@/lib/actions/task-groups";
-import { updateTaskStatus } from "@/lib/actions/tasks";
-import {
-  EVENT_LINK_ROLES,
-  TASK_STATUSES,
-  labelize,
-} from "@/lib/constants";
+import { labelize } from "@/lib/constants";
 import {
   loadEntityOptions,
   loadNotesForEntity,
   loadRelatedLinksForEntity,
 } from "@/lib/entities";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { formatOffsetLabel } from "@/lib/offsets";
 
 export default async function EventDetailPage({
@@ -72,17 +60,10 @@ export default async function EventDetailPage({
     : [null];
 
   const links = await db
-    .select({
-      link: eventContacts,
-      contact: contacts,
-      organization: organizations,
-    })
+    .select({ link: eventContacts, contact: contacts, organization: organizations })
     .from(eventContacts)
     .leftJoin(contacts, eq(eventContacts.contactId, contacts.id))
-    .leftJoin(
-      organizations,
-      eq(eventContacts.organizationId, organizations.id),
-    )
+    .leftJoin(organizations, eq(eventContacts.organizationId, organizations.id))
     .where(eq(eventContacts.eventId, id));
 
   const eventTasks = await db
@@ -93,42 +74,10 @@ export default async function EventDetailPage({
 
   const groups = await db.select().from(taskGroups).orderBy(asc(taskGroups.name));
   const applications = await db
-    .select({
-      application: taskGroupApplications,
-      group: taskGroups,
-    })
+    .select({ group: taskGroups })
     .from(taskGroupApplications)
-    .innerJoin(
-      taskGroups,
-      eq(taskGroupApplications.taskGroupId, taskGroups.id),
-    )
+    .innerJoin(taskGroups, eq(taskGroupApplications.taskGroupId, taskGroups.id))
     .where(eq(taskGroupApplications.eventId, id));
-
-  const allContacts = await db.select().from(contacts).orderBy(asc(contacts.name));
-  const allOrgs = await db
-    .select()
-    .from(organizations)
-    .orderBy(asc(organizations.name));
-  const assigneeUsers = await listEventAssigneeUsers(id);
-
-  const taskIds = eventTasks.map((task) => task.id);
-  const taskAssigneeRows =
-    taskIds.length > 0
-      ? await db
-          .select({
-            taskId: taskAssignees.taskId,
-            userName: users.name,
-          })
-          .from(taskAssignees)
-          .innerJoin(users, eq(taskAssignees.userId, users.id))
-          .where(inArray(taskAssignees.taskId, taskIds))
-      : [];
-  const assigneesByTask = new Map<number, string[]>();
-  for (const row of taskAssigneeRows) {
-    const list = assigneesByTask.get(row.taskId) ?? [];
-    list.push(row.userName);
-    assigneesByTask.set(row.taskId, list);
-  }
 
   const [options, noteRows, related] = await Promise.all([
     loadEntityOptions(),
@@ -154,240 +103,99 @@ export default async function EventDetailPage({
         }
       />
 
-      <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5 space-y-3">
-        <div className="flex flex-wrap gap-2">
-          <Badge>{labelize(event.status)}</Badge>
-          {venueOrg ? (
-            <Link href={`/organizations/${venueOrg.id}`}>
-              <Badge>{venueOrg.name}</Badge>
-            </Link>
-          ) : null}
-        </div>
-        <p className="text-sm text-[color:var(--muted)]">
-          Assignees:{" "}
-          {assigneeUsers.length > 0
-            ? assigneeUsers.map((user) => user.name).join(", ")
-            : "None — edit the event to assign staff."}
-        </p>
-        <p className="whitespace-pre-wrap text-sm text-[color:var(--muted)]">
-          {event.notes || "No notes."}
-        </p>
-        <p className="text-xs text-[color:var(--muted)]">
-          Changing the event date does not auto-shift existing tasks. Use
-          recalculate below for incomplete template-linked tasks only.
-        </p>
-      </div>
-
-      <Section title="Linked people & orgs">
-        {links.length === 0 ? (
-          <p className="text-sm text-[color:var(--muted)]">No links yet.</p>
-        ) : (
-          <ul className="mb-4 divide-y divide-[color:var(--line)] overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)]">
-            {links.map(({ link, contact, organization }) => (
-              <li
-                key={link.id}
-                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="text-sm">
-                  <div className="font-medium">
-                    {contact ? (
-                      <Link
-                        href={`/contacts/${contact.id}`}
-                        className="text-[color:var(--accent)]"
-                      >
-                        {contact.name}
-                      </Link>
-                    ) : organization ? (
-                      <Link
-                        href={`/organizations/${organization.id}`}
-                        className="text-[color:var(--accent)]"
-                      >
-                        {organization.name}
-                      </Link>
-                    ) : (
-                      "Unknown"
-                    )}
-                  </div>
-                  <div className="text-[color:var(--muted)]">
-                    {link.role}
-                    {contact && organization ? ` · ${organization.name}` : ""}
-                  </div>
-                </div>
-                <form action={removeEventLink.bind(null, id, link.id)}>
-                  <SubmitButton variant="secondary">Remove</SubmitButton>
-                </form>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <form
-          action={addEventLink.bind(null, id)}
-          className="grid max-w-3xl gap-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4 sm:grid-cols-2"
-        >
-          <Field label="Contact">
-            <select className={inputClassName} name="contactId" defaultValue="">
-              <option value="">None</option>
-              {allContacts.map((contact) => (
-                <option key={contact.id} value={contact.id}>
-                  {contact.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Organization">
-            <select
-              className={inputClassName}
-              name="organizationId"
-              defaultValue=""
-            >
-              <option value="">None</option>
-              {allOrgs.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Role">
-            <select className={inputClassName} name="role" defaultValue="contact">
-              {EVENT_LINK_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Notes">
-            <input className={inputClassName} name="notes" />
-          </Field>
-          <div className="sm:col-span-2">
-            <SubmitButton>Add link</SubmitButton>
-          </div>
-        </form>
-      </Section>
-
-      <Section
-        title="Tasks"
-        actions={
-          <form action={recalculateOpenTasksFromTemplates.bind(null, id)}>
-            <SubmitButton variant="secondary">
-              Recalculate open tasks from templates
-            </SubmitButton>
-          </form>
-        }
-      >
-        {eventTasks.length === 0 ? (
-          <p className="text-sm text-[color:var(--muted)]">
-            No tasks yet. Apply a task group below.
-          </p>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)]">
-            <ul className="divide-y divide-[color:var(--line)]">
-              {eventTasks.map((task) => (
-                <li
-                  key={task.id}
-                  className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <div className="font-medium">
-                      <Link
-                        href={`/tasks/${task.id}`}
-                        className="text-[color:var(--accent)]"
-                      >
-                        {task.title}
-                      </Link>
-                    </div>
-                    <div className="text-sm text-[color:var(--muted)]">
-                      {formatDate(task.dueOn)} · {labelize(task.kind)}
-                      {assigneesByTask.get(task.id)?.length
-                        ? ` · ${assigneesByTask.get(task.id)!.join(", ")}`
-                        : ""}
-                    </div>
-                  </div>
-                  <form
-                    action={updateTaskStatus.bind(null, task.id)}
-                    className="flex items-center gap-2"
-                  >
-                    <select
-                      className={inputClassName}
-                      name="status"
-                      defaultValue={task.status}
-                    >
-                      {TASK_STATUSES.map((status) => (
-                        <option key={status} value={status}>
-                          {labelize(status)}
-                        </option>
-                      ))}
-                    </select>
-                    <SubmitButton variant="secondary">Update</SubmitButton>
-                  </form>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </Section>
-
-      <Section title="Apply task group">
-        {applications.length > 0 ? (
-          <p className="mb-3 text-sm text-[color:var(--muted)]">
-            Already applied:{" "}
-            {applications.map(({ group }) => group.name).join(", ")}. Re-apply
-            uses “add missing only” to skip templates that already spawned a
-            task.
-          </p>
-        ) : null}
-        <form
-          action={applyTaskGroupToEvent.bind(null, id)}
-          className="max-w-xl space-y-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4"
-        >
-          <Field
-            label="Task group"
-            hint="dueOn = event date + offsetDays (negative before, positive after)"
-          >
-            <select className={inputClassName} name="taskGroupId" required>
-              <option value="">Select group</option>
-              {groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Mode">
-            <select className={inputClassName} name="mode" defaultValue="block">
-              <option value="block">Apply once (block if already applied)</option>
-              <option value="add_missing">Add missing only</option>
-            </select>
-          </Field>
-          <SubmitButton>Apply to event</SubmitButton>
-        </form>
-        {groups.length === 0 ? (
-          <p className="mt-3 text-sm text-[color:var(--muted)]">
-            Create a task group first. Example offsets:{" "}
-            {formatOffsetLabel(-14)}, {formatOffsetLabel(2)},{" "}
-            {formatOffsetLabel(182)}.
-          </p>
-        ) : null}
-      </Section>
+      <RecordSummary
+        badges={[
+          <Badge key="status">{labelize(event.status)}</Badge>,
+          venueOrg ? (
+            <BadgeLink key="venue" href={`/organizations/${venueOrg.id}`}>
+              {venueOrg.name}
+            </BadgeLink>
+          ) : null,
+        ].filter(Boolean)}
+        facts={[
+          ["When", formatDateTime(event.startsAt)],
+          ["Venue", [event.venue, event.location].filter(Boolean).join(" · ") || "—"],
+        ]}
+        notes={event.notes}
+        hint="Changing the event date does not auto-shift existing tasks. Use “Recalculate from templates” for incomplete template-linked tasks."
+      />
 
       <RecordMetaPanel entity="event" id={id} />
 
+      <TaskListSection
+        tasks={eventTasks}
+        empty="No tasks yet. Use “Apply task group” to add a set of tasks."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <form action={recalculateOpenTasksFromTemplates.bind(null, id)}>
+              <SubmitButton variant="secondary">Recalculate from templates</SubmitButton>
+            </form>
+            <AddDialog label="Apply task group" title="Apply task group">
+              {applications.length > 0 ? (
+                <p className="mb-3 text-sm text-[color:var(--muted)]">
+                  Already applied: {applications.map(({ group }) => group.name).join(", ")}.
+                  Re-apply uses “add missing only” to skip templates that already spawned a task.
+                </p>
+              ) : null}
+              <form action={applyTaskGroupToEvent.bind(null, id)} className="space-y-3">
+                <Field
+                  label="Task group"
+                  hint="dueOn = event date + offsetDays (negative before, positive after)"
+                >
+                  <select className={inputClassName} name="taskGroupId" required>
+                    <option value="">Select group</option>
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Mode">
+                  <select className={inputClassName} name="mode" defaultValue="block">
+                    <option value="block">Apply once (block if already applied)</option>
+                    <option value="add_missing">Add missing only</option>
+                  </select>
+                </Field>
+                <SubmitButton>Apply to event</SubmitButton>
+              </form>
+              {groups.length === 0 ? (
+                <p className="mt-3 text-sm text-[color:var(--muted)]">
+                  Create a task group first. Example offsets: {formatOffsetLabel(-14)},{" "}
+                  {formatOffsetLabel(2)}, {formatOffsetLabel(182)}.
+                </p>
+              ) : null}
+            </AddDialog>
+          </div>
+        }
+      />
+
       <CustomFieldsPanel entity="event" id={id} />
 
-      <NotesPanel
-        entityType="event"
-        entityId={id}
-        notes={noteRows}
-        options={options}
-      />
+      <NotesPanel entityType="event" entityId={id} notes={noteRows} options={options} />
 
       <RelatedLinksPanel
         entityType="event"
         entityId={id}
         links={related}
-        options={options}
+        extraLinks={links
+          .map(({ link, contact, organization }) => {
+            const target = contact
+              ? { type: "contact" as const, id: contact.id, label: contact.name, href: `/contacts/${contact.id}` }
+              : organization
+                ? { type: "organization" as const, id: organization.id, label: organization.name, href: `/organizations/${organization.id}` }
+                : null;
+            if (!target) return null;
+            return {
+              key: `event-contact-${link.id}`,
+              ...target,
+              detail: [labelize(link.role), contact && organization ? organization.name : null, link.notes]
+                .filter(Boolean)
+                .join(" · "),
+              remove: removeEventLink.bind(null, id, link.id, undefined),
+            };
+          })
+          .filter((row) => row != null)}
       />
 
       <ActivityTimeline entity="event" id={id} />

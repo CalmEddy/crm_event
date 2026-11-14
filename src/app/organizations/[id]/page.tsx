@@ -1,21 +1,16 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { connection } from "next/server";
 import { ActivityTimeline } from "@/components/activity-timeline";
-import { CustomFieldsPanel } from "@/components/custom-fields-panel";
-import { RecordMetaPanel } from "@/components/record-meta-panel";
 import { ContactDetails } from "@/components/contact-details";
+import { CustomFieldsPanel } from "@/components/custom-fields-panel";
 import { NotesPanel } from "@/components/notes-panel";
+import { RecordMetaPanel } from "@/components/record-meta-panel";
+import { RecordListSection, RecordSummary, TaskListSection } from "@/components/record-page";
 import { RelatedLinksPanel } from "@/components/related-links-panel";
-import {
-  Badge,
-  ButtonLink,
-  PageHeader,
-  Section,
-  SubmitButton,
-} from "@/components/ui";
-import { contacts, events, getDb, organizations } from "@/db";
+import { Badge, ButtonLink, PageHeader, SubmitButton } from "@/components/ui";
+import { contacts, eventContacts, events, getDb, organizations, tasks } from "@/db";
+import { removeEventLink } from "@/lib/actions/events";
 import { deleteOrganization } from "@/lib/actions/organizations";
 import { labelize } from "@/lib/constants";
 import {
@@ -34,20 +29,30 @@ export default async function OrganizationDetailPage({
   if (!Number.isFinite(id)) notFound();
 
   const db = await getDb();
-  const [org] = await db
-    .select()
-    .from(organizations)
-    .where(eq(organizations.id, id));
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
   if (!org) notFound();
 
   const people = await db
     .select()
     .from(contacts)
-    .where(eq(contacts.organizationId, id));
-  const relatedEvents = await db
+    .where(eq(contacts.organizationId, id))
+    .orderBy(asc(contacts.name));
+  const venueEvents = await db
     .select()
     .from(events)
-    .where(eq(events.venueOrganizationId, id));
+    .where(eq(events.venueOrganizationId, id))
+    .orderBy(asc(events.startsAt));
+  // Tasks for this organization's people.
+  const peopleIds = people.map((person) => person.id);
+  const orgTasks = peopleIds.length
+    ? await db.select().from(tasks).where(inArray(tasks.contactId, peopleIds)).orderBy(asc(tasks.dueOn))
+    : [];
+  // Events this organization is booked on (the event's people & orgs).
+  const eventLinks = await db
+    .select({ link: eventContacts, event: events })
+    .from(eventContacts)
+    .innerJoin(events, eq(eventContacts.eventId, events.id))
+    .where(eq(eventContacts.organizationId, id));
 
   const [options, noteRows, related] = await Promise.all([
     loadEntityOptions(),
@@ -56,12 +61,13 @@ export default async function OrganizationDetailPage({
   ]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
         title={org.name}
         description={[labelize(org.type), org.city].filter(Boolean).join(" · ")}
         actions={
           <>
+            <ButtonLink href={`/contacts/new?organizationId=${id}`}>Add contact</ButtonLink>
             <ButtonLink href={`/organizations/${id}/edit`} variant="secondary">
               Edit
             </ButtonLink>
@@ -72,81 +78,63 @@ export default async function OrganizationDetailPage({
         }
       />
 
-      <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5 text-sm">
-        <div className="mb-2 flex gap-2">
-          <Badge>{labelize(org.type)}</Badge>
-          {org.city ? <Badge>{org.city}</Badge> : null}
-        </div>
+      <RecordSummary
+        badges={[
+          <Badge key="type">{labelize(org.type)}</Badge>,
+          org.city ? <Badge key="city">{org.city}</Badge> : null,
+        ].filter(Boolean)}
+        notes={org.notes}
+      >
         <ContactDetails details={org} />
-        <p className="mt-3 whitespace-pre-wrap text-[color:var(--muted)]">
-          {org.notes || "No profile notes."}
-        </p>
-      </div>
-
-      <Section title="Contacts">
-        {people.length === 0 ? (
-          <p className="text-sm text-[color:var(--muted)]">No contacts linked.</p>
-        ) : (
-          <ul className="space-y-2">
-            {people.map((person) => (
-              <li key={person.id}>
-                <Link
-                  href={`/contacts/${person.id}`}
-                  className="text-[color:var(--accent)]"
-                >
-                  {person.name}
-                </Link>
-                {person.role ? (
-                  <span className="text-sm text-[color:var(--muted)]">
-                    {" "}
-                    · {person.role}
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section title="Venue events">
-        {relatedEvents.length === 0 ? (
-          <p className="text-sm text-[color:var(--muted)]">No events as venue org.</p>
-        ) : (
-          <ul className="space-y-2">
-            {relatedEvents.map((event) => (
-              <li key={event.id}>
-                <Link
-                  href={`/events/${event.id}`}
-                  className="text-[color:var(--accent)]"
-                >
-                  {event.title}
-                </Link>
-                <span className="text-sm text-[color:var(--muted)]">
-                  {" "}
-                  · {formatDateTime(event.startsAt)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+      </RecordSummary>
 
       <RecordMetaPanel entity="organization" id={id} />
 
+      <RecordListSection
+        title="People"
+        empty="No contacts at this organization yet. Use “Add contact” to add one."
+        items={people.map((person) => ({
+          key: person.id,
+          href: `/contacts/${person.id}`,
+          label: person.name,
+          detail: [person.role, person.email, person.phone].filter(Boolean).join(" · "),
+        }))}
+      />
+
+      <RecordListSection
+        title="Venue events"
+        empty="No events at this venue."
+        items={venueEvents.map((event) => ({
+          key: event.id,
+          href: `/events/${event.id}`,
+          label: event.title,
+          detail: [formatDateTime(event.startsAt), labelize(event.status)].join(" · "),
+        }))}
+      />
+
+      <TaskListSection
+        tasks={orgTasks}
+        showEvent
+        empty="No tasks for this organization's people."
+      />
+
       <CustomFieldsPanel entity="organization" id={id} />
 
-      <NotesPanel
-        entityType="organization"
-        entityId={id}
-        notes={noteRows}
-        options={options}
-      />
+      <NotesPanel entityType="organization" entityId={id} notes={noteRows} options={options} />
 
       <RelatedLinksPanel
         entityType="organization"
         entityId={id}
         links={related}
-        options={options}
+        extraLinks={eventLinks.map(({ link, event }) => ({
+          key: `event-contact-${link.id}`,
+          type: "event" as const,
+          id: event.id,
+          label: event.title,
+          href: `/events/${event.id}`,
+          detail: [labelize(link.role), formatDateTime(event.startsAt), link.notes].filter(Boolean).join(" · "),
+          remove: removeEventLink.bind(null, event.id, link.id, `/organizations/${id}`),
+        }))}
       />
 
       <ActivityTimeline entity="organization" id={id} />

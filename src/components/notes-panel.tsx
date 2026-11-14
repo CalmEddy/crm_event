@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AddDialog } from "@/components/add-dialog";
 import {
   Field,
   Section,
@@ -45,11 +46,42 @@ export function NotesPanel({
   );
 
   return (
-    <Section title="Notes">
+    <Section
+      title="Notes"
+      actions={
+        <AddDialog title="Add note">
+          <form
+            action={createNoteForEntity.bind(null, entityType, entityId)}
+            className="space-y-3"
+          >
+            <Field label="Note">
+              <textarea
+                className={inputClassName}
+                name="body"
+                rows={3}
+                required
+                placeholder="Call notes, logistics, promises…"
+              />
+            </Field>
+            <Field label="Also attach to (optional)">
+              <select className={inputClassName} name="alsoEntity" defaultValue="">
+                <option value="">Just this record</option>
+                {alsoOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <SubmitButton>Save note</SubmitButton>
+          </form>
+        </AddDialog>
+      }
+    >
       {notes.length === 0 ? (
         <p className="text-sm text-[color:var(--muted)]">No notes yet.</p>
       ) : (
-        <ul className="mb-4 space-y-3">
+        <ul className="space-y-3">
           {notes.map(({ note, links }) => (
             <li
               key={note.id}
@@ -81,31 +113,6 @@ export function NotesPanel({
         </ul>
       )}
 
-      <form
-        action={createNoteForEntity.bind(null, entityType, entityId)}
-        className="max-w-2xl space-y-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4"
-      >
-        <Field label="Add note">
-          <textarea
-            className={inputClassName}
-            name="body"
-            rows={3}
-            required
-            placeholder="Call notes, logistics, promises…"
-          />
-        </Field>
-        <Field label="Also attach to (optional)">
-          <select className={inputClassName} name="alsoEntity" defaultValue="">
-            <option value="">Just this record</option>
-            {alsoOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <SubmitButton>Save note</SubmitButton>
-      </form>
     </Section>
   );
 }

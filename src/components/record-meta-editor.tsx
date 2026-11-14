@@ -17,7 +17,8 @@ export function RecordMetaEditor({
   id,
   tags,
   allTags,
-  owners,
+  people,
+  peopleLabel,
   users,
   currentUserId,
 }: {
@@ -25,13 +26,14 @@ export function RecordMetaEditor({
   id: number;
   tags: Ref[];
   allTags: TagOption[];
-  /** null when this record type has no owners. */
-  owners: Ref[] | null;
+  people: Ref[];
+  /** "Assignees" (events, tasks) or "Owners" (contacts, organizations). */
+  peopleLabel: string;
   users: Ref[];
   currentUserId: number | null;
 }) {
   const [state, apply] = useOptimistic<Lists, Change>(
-    { tags, owners: owners ?? [] },
+    { tags, owners: people },
     (current, { key, add, remove }) => {
       const drop = new Set([...remove, ...add.map((r) => r.id)]);
       return { ...current, [key]: [...current[key].filter((r) => !drop.has(r.id)), ...add] };
@@ -63,7 +65,7 @@ export function RecordMetaEditor({
 
   const ownerApi: AssignApi = {
     entity,
-    noun: "Owners",
+    noun: peopleLabel,
     users,
     currentUserId,
     change: (ids, add, remove) =>
@@ -81,12 +83,10 @@ export function RecordMetaEditor({
         <span className="text-[color:var(--muted)]">Tags</span>
         <TagPicker api={tagApi} ids={[id]} value={state.tags} />
       </div>
-      {owners ? (
-        <div className="flex items-center gap-3">
-          <span className="text-[color:var(--muted)]">Owners</span>
-          <AssigneePicker api={ownerApi} ids={[id]} value={state.owners} />
-        </div>
-      ) : null}
+      <div className="flex items-center gap-3">
+        <span className="text-[color:var(--muted)]">{peopleLabel}</span>
+        <AssigneePicker api={ownerApi} ids={[id]} value={state.owners} />
+      </div>
       {error ? (
         <p role="alert" className="w-full text-[color:var(--danger)]">
           {error}

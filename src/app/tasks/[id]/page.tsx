@@ -1,24 +1,16 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { connection } from "next/server";
 import { ActivityTimeline } from "@/components/activity-timeline";
 import { CustomFieldsPanel } from "@/components/custom-fields-panel";
-import { RecordMetaPanel } from "@/components/record-meta-panel";
 import { NotesPanel } from "@/components/notes-panel";
+import { RecordMetaPanel } from "@/components/record-meta-panel";
+import { RecordLink, RecordSummary, TaskStatusForm } from "@/components/record-page";
 import { RelatedLinksPanel } from "@/components/related-links-panel";
-import {
-  Badge,
-  ButtonLink,
-  PageHeader,
-  Section,
-  SubmitButton,
-  inputClassName,
-} from "@/components/ui";
+import { Badge, ButtonLink, PageHeader, SubmitButton } from "@/components/ui";
 import { contacts, events, getDb, tasks } from "@/db";
-import { usersByIds, listTaskAssigneeIds } from "@/lib/assignees";
-import { deleteTask, updateTaskStatus } from "@/lib/actions/tasks";
-import { TASK_STATUSES, labelize } from "@/lib/constants";
+import { deleteTask } from "@/lib/actions/tasks";
+import { labelize } from "@/lib/constants";
 import {
   loadEntityOptions,
   loadNotesForEntity,
@@ -45,13 +37,15 @@ export default async function TaskDetailPage({
     ? await db.select().from(contacts).where(eq(contacts.id, task.contactId))
     : [null];
 
-  const [options, noteRows, related, assigneeIds] = await Promise.all([
+  const [options, noteRows, related] = await Promise.all([
     loadEntityOptions(),
     loadNotesForEntity({ type: "task", id }),
     loadRelatedLinksForEntity({ type: "task", id }),
-    listTaskAssigneeIds(id),
   ]);
-  const assigneeUsers = await usersByIds(assigneeIds);
+
+  const followUp = new URLSearchParams();
+  if (task.eventId) followUp.set("eventId", String(task.eventId));
+  if (task.contactId) followUp.set("contactId", String(task.contactId));
 
   return (
     <div className="space-y-10">
@@ -60,6 +54,7 @@ export default async function TaskDetailPage({
         description={`${formatDate(task.dueOn)} · ${labelize(task.kind)}`}
         actions={
           <>
+            <ButtonLink href={`/tasks/new${followUp.size ? `?${followUp}` : ""}`}>Add task</ButtonLink>
             <ButtonLink href={`/tasks/${id}/edit`} variant="secondary">
               Edit
             </ButtonLink>
@@ -70,95 +65,29 @@ export default async function TaskDetailPage({
         }
       />
 
-      <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-5 space-y-3">
-        <div className="flex flex-wrap gap-2">
-          <Badge>{labelize(task.status)}</Badge>
-          <Badge>{labelize(task.kind)}</Badge>
-        </div>
-        <p className="text-sm">
-          <span className="text-[color:var(--muted)]">Event:</span>{" "}
-          {event ? (
-            <Link href={`/events/${event.id}`} className="text-[color:var(--accent)]">
-              {event.title}
-            </Link>
-          ) : (
-            "—"
-          )}
-        </p>
-        <p className="text-sm">
-          <span className="text-[color:var(--muted)]">Contact:</span>{" "}
-          {contact ? (
-            <Link
-              href={`/contacts/${contact.id}`}
-              className="text-[color:var(--accent)]"
-            >
-              {contact.name}
-            </Link>
-          ) : (
-            "—"
-          )}
-        </p>
-        <p className="text-sm text-[color:var(--muted)]">
-          Assignees:{" "}
-          {assigneeUsers.length > 0
-            ? assigneeUsers.map((user) => user.name).join(", ")
-            : "None — edit the task to assign staff."}
-        </p>
-        <p className="whitespace-pre-wrap text-sm text-[color:var(--muted)]">
-          {task.notes || "No profile notes on this task."}
-        </p>
-        <form
-          action={updateTaskStatus.bind(null, id)}
-          className="flex flex-wrap items-center gap-2 pt-2"
-        >
-          <select
-            className={inputClassName}
-            name="status"
-            defaultValue={task.status}
-          >
-            {TASK_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {labelize(status)}
-              </option>
-            ))}
-          </select>
-          <SubmitButton variant="secondary">Update status</SubmitButton>
-        </form>
-      </div>
+      <RecordSummary
+        badges={[
+          <Badge key="status">{labelize(task.status)}</Badge>,
+          <Badge key="kind">{labelize(task.kind)}</Badge>,
+        ]}
+        facts={[
+          ["Due", formatDate(task.dueOn)],
+          ["Event", event ? <RecordLink href={`/events/${event.id}`}>{event.title}</RecordLink> : "—"],
+          ["Contact", contact ? <RecordLink href={`/contacts/${contact.id}`}>{contact.name}</RecordLink> : "—"],
+          ["Status", <TaskStatusForm key="status" taskId={id} status={task.status} />],
+        ]}
+        notes={task.notes}
+      />
 
       <RecordMetaPanel entity="task" id={id} />
 
       <CustomFieldsPanel entity="task" id={id} />
 
-      <NotesPanel
-        entityType="task"
-        entityId={id}
-        notes={noteRows}
-        options={options}
-      />
+      <NotesPanel entityType="task" entityId={id} notes={noteRows} options={options} />
 
-      <RelatedLinksPanel
-        entityType="task"
-        entityId={id}
-        links={related}
-        options={options}
-      />
+      <RelatedLinksPanel entityType="task" entityId={id} links={related} options={options} />
 
       <ActivityTimeline entity="task" id={id} />
-
-      <Section title="Quick actions">
-        <div className="flex flex-wrap gap-2">
-          <ButtonLink href="/tasks/new">Create another task</ButtonLink>
-          {task.eventId ? (
-            <ButtonLink
-              href={`/events/${task.eventId}`}
-              variant="secondary"
-            >
-              Open event
-            </ButtonLink>
-          ) : null}
-        </div>
-      </Section>
     </div>
   );
 }
