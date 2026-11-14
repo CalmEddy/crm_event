@@ -1,6 +1,7 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb, noteLinks, notes, type EntityType } from "@/db";
 import { requireSignedIn } from "@/lib/auth";
@@ -109,4 +110,57 @@ export async function deleteNote(noteId: number, returnTo: string) {
     links.map((link) => ({ type: link.entityType, id: link.entityId })),
   );
   redirect(returnTo || "/notes");
+}
+
+/** Only return to pages on this site (record pages or the notes list). */
+function safeReturn(returnTo: string) {
+  return /^\/(notes|(contacts|organizations|events|tasks)\/\d+)$/.test(returnTo) ? returnTo : "/notes";
+}
+
+async function noteRefs(noteId: number): Promise<EntityRef[]> {
+  const db = await getDb();
+  const links = await db.select().from(noteLinks).where(eq(noteLinks.noteId, noteId));
+  return links.map((link) => ({ type: link.entityType, id: link.entityId }));
+}
+
+export async function updateNote(noteId: number, returnTo: string, formData: FormData) {
+  await requireSignedIn();
+  const body = String(formData.get("body") ?? "").trim();
+  if (!body) throw new Error("Note body is required");
+  const db = await getDb();
+  await db.update(notes).set({ body, updatedAt: new Date() }).where(eq(notes.id, noteId));
+  revalidateEntityPaths(await noteRefs(noteId));
+  revalidatePath("/notes");
+  redirect(safeReturn(returnTo));
+}
+
+/**
+ * Detach a note from one record. A note must stay attached to at least one
+ * record, so the last link can't be removed (delete the note instead).
+ */
+export async function unlinkNote(
+  noteId: number,
+  entityType: EntityType,
+  entityId: number,
+  returnTo: string,
+) {
+  await requireSignedIn();
+  const refs = await noteRefs(noteId);
+  const others = refs.filter((ref) => !(ref.type === entityType && ref.id === entityId));
+  if (others.length === 0) {
+    throw new Error("A note needs at least one linked record. Delete the note instead.");
+  }
+  const db = await getDb();
+  await db
+    .delete(noteLinks)
+    .where(
+      and(
+        eq(noteLinks.noteId, noteId),
+        eq(noteLinks.entityType, entityType),
+        eq(noteLinks.entityId, entityId),
+      ),
+    );
+  revalidateEntityPaths(refs);
+  revalidatePath("/notes");
+  redirect(safeReturn(returnTo));
 }
