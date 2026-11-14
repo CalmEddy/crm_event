@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { asc, desc } from "drizzle-orm";
 import { connection } from "next/server";
 import {
@@ -9,7 +8,8 @@ import {
   inputClassName,
 } from "@/components/ui";
 import { getDb, noteLinks, notes } from "@/db";
-import { createStandaloneNote, deleteNote } from "@/lib/actions/notes";
+import { createStandaloneNote } from "@/lib/actions/notes";
+import { NoteItem } from "@/components/note-item";
 import {
   ENTITY_TYPES,
   entityHref,
@@ -17,7 +17,6 @@ import {
   loadEntityOptions,
   resolveEntityLabel,
 } from "@/lib/entities";
-import { formatDateTime } from "@/lib/format";
 
 export default async function NotesPage() {
   await connection();
@@ -105,31 +104,8 @@ export default async function NotesPage() {
         />
       ) : (
         <ul className="space-y-3">
-          {enriched.map(({ note, links }) => (
-            <li
-              key={note.id}
-              className="rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4"
-            >
-              <p className="whitespace-pre-wrap text-sm">{note.body}</p>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[color:var(--muted)]">
-                <span>{formatDateTime(note.createdAt)}</span>
-                {links.map((link) => (
-                  <Link
-                    key={`${note.id}-${link.type}-${link.id}`}
-                    href={link.href}
-                    className="rounded-md bg-[color:var(--panel-soft)] px-2 py-0.5 text-[color:var(--accent)]"
-                  >
-                    {entityTypeLabel(link.type)}: {link.label}
-                  </Link>
-                ))}
-                <form
-                  action={deleteNote.bind(null, note.id, "/notes")}
-                  className="ml-auto"
-                >
-                  <SubmitButton variant="secondary">Delete</SubmitButton>
-                </form>
-              </div>
-            </li>
+          {enriched.map((item) => (
+            <NoteItem key={item.note.id} {...item} returnTo="/notes" />
           ))}
         </ul>
       )}

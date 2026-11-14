@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { AddDialog } from "@/components/add-dialog";
 import {
   Field,
@@ -6,14 +5,14 @@ import {
   SubmitButton,
   inputClassName,
 } from "@/components/ui";
-import { createNoteForEntity, deleteNote } from "@/lib/actions/notes";
+import { createNoteForEntity } from "@/lib/actions/notes";
+import { NoteItem } from "@/components/note-item";
 import {
   ENTITY_TYPES,
   entityTypeLabel,
   type EntityOptionMap,
   type NoteWithLinks,
 } from "@/lib/entities";
-import { formatDateTime } from "@/lib/format";
 import type { EntityType } from "@/db";
 
 export function NotesPanel({
@@ -82,33 +81,8 @@ export function NotesPanel({
         <p className="text-sm text-[color:var(--muted)]">No notes yet.</p>
       ) : (
         <ul className="space-y-3">
-          {notes.map(({ note, links }) => (
-            <li
-              key={note.id}
-              className="rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4"
-            >
-              <p className="whitespace-pre-wrap text-sm text-[color:var(--ink)]">
-                {note.body}
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[color:var(--muted)]">
-                <span>{formatDateTime(note.createdAt)}</span>
-                {links.map((link) => (
-                  <Link
-                    key={`${link.type}-${link.id}`}
-                    href={link.href}
-                    className="rounded-md bg-[color:var(--panel-soft)] px-2 py-0.5 text-[color:var(--accent)]"
-                  >
-                    {entityTypeLabel(link.type)}: {link.label}
-                  </Link>
-                ))}
-                <form
-                  action={deleteNote.bind(null, note.id, returnTo)}
-                  className="ml-auto"
-                >
-                  <SubmitButton variant="secondary">Delete</SubmitButton>
-                </form>
-              </div>
-            </li>
+          {notes.map((item) => (
+            <NoteItem key={item.note.id} {...item} returnTo={returnTo} />
           ))}
         </ul>
       )}
