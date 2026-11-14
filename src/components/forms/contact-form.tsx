@@ -12,7 +12,10 @@ export function ContactForm({
   action,
   contact,
   organizations,
+  defaultOrganizationId,
 }: {
+  /** Pre-selected organization for a new contact. */
+  defaultOrganizationId?: number | null;
   action: (formData: FormData) => Promise<void>;
   contact?: Contact;
   organizations: Organization[];
@@ -41,7 +44,7 @@ export function ContactForm({
         <select
           className={inputClassName}
           name="organizationId"
-          defaultValue={contact?.organizationId?.toString() ?? ""}
+          defaultValue={(contact?.organizationId ?? defaultOrganizationId)?.toString() ?? ""}
         >
           <option value="">None</option>
           {organizations.map((org) => (

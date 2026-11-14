@@ -214,12 +214,15 @@ export async function addEventLink(eventId: number, formData: FormData) {
   redirect(`/events/${eventId}`);
 }
 
-export async function removeEventLink(eventId: number, linkId: number) {
+export async function removeEventLink(eventId: number, linkId: number, returnTo?: string) {
   await requireSignedIn();
   const db = await getDb();
   await db
     .delete(eventContacts)
     .where(and(eq(eventContacts.id, linkId), eq(eventContacts.eventId, eventId)));
   revalidatePath(`/events/${eventId}`);
-  redirect(`/events/${eventId}`);
+  // Only record pages on this site, so the link can be removed from a contact page too.
+  const back = returnTo && /^\/(contacts|organizations)\/\d+$/.test(returnTo) ? returnTo : `/events/${eventId}`;
+  revalidatePath(back);
+  redirect(back);
 }
