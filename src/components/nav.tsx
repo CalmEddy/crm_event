@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { signOut } from "@/lib/actions/session";
 import { getViewer, resolveStaffUser } from "@/lib/auth";
 
 const links = [
@@ -13,6 +14,7 @@ const links = [
   { href: "/users", label: "Users" },
   { href: "/settings/tags", label: "Tags" },
   { href: "/settings/fields", label: "Fields" },
+  { href: "/settings/notifications", label: "Notifications" },
 ];
 
 export async function Nav() {
@@ -41,14 +43,26 @@ export async function Nav() {
               </Link>
             ))}
           </nav>
-          {label ? (
-            <p className="text-xs text-[color:var(--muted)]">
-              <kbd className="mr-2 rounded border border-[color:var(--line)] px-1 font-sans">Ctrl K</kbd>
-              Signed in as{" "}
-              <span className="text-[color:var(--ink)]">{label}</span>
-              {staff?.email ? ` · ${staff.email}` : ""}
-            </p>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--muted)] sm:justify-end">
+            {label ? (
+              <p>
+                <kbd className="mr-2 rounded border border-[color:var(--line)] px-1 font-sans">Ctrl K</kbd>
+                Signed in as{" "}
+                <span className="text-[color:var(--ink)]">{label}</span>
+                {staff?.email ? ` · ${staff.email}` : ""}
+              </p>
+            ) : null}
+            {viewer?.simulated ? (
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="rounded border border-[color:var(--line)] px-2 py-0.5 text-[color:var(--ink)] transition hover:bg-[color:var(--panel-soft)]"
+                >
+                  Log out
+                </button>
+              </form>
+            ) : null}
+          </div>
         </div>
       </div>
     </header>

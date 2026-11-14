@@ -2,9 +2,11 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb, users } from "@/db";
 import { requireSignedIn } from "@/lib/auth";
+import { LOCAL_USER_COOKIE } from "@/lib/local-session";
 import { isUniqueViolation } from "@/lib/db-errors";
 
 export type UserActionState = {
@@ -135,6 +137,9 @@ export async function deleteUser(id: number) {
     await requireSignedIn();
     const db = await getDb();
     await db.delete(users).where(eq(users.id, id));
+    // Deleting the staff member this browser is signed in as (local server) signs it out.
+    const jar = await cookies();
+    if (jar.get(LOCAL_USER_COOKIE)?.value === String(id)) jar.delete(LOCAL_USER_COOKIE);
   } catch (error) {
     console.error("deleteUser failed", error);
     throw new Error(
