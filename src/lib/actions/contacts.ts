@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { contacts, getDb } from "@/db";
 import { deletePolymorphicRefsForEntity } from "@/lib/entities";
 import { requireSignedIn } from "@/lib/auth";
+import { notifyOwnersOfChange } from "@/lib/notifications/record-events";
 import { CONTACT_KEYS, readContactInfo } from "@/lib/contact-info";
 
 function readContactFields(formData: FormData) {
@@ -48,6 +49,7 @@ export async function updateContact(id: number, formData: FormData) {
     .set({ ...fields, updatedAt: new Date() })
     .where(eq(contacts.id, id));
   await logUpdated("contact", id, before);
+  await notifyOwnersOfChange("contact", id, "updated");
   revalidatePath("/contacts");
   revalidatePath(`/contacts/${id}`);
   redirect(`/contacts/${id}`);
@@ -55,6 +57,8 @@ export async function updateContact(id: number, formData: FormData) {
 
 export async function deleteContact(id: number) {
   await requireSignedIn();
+  // Notify before the owner links disappear.
+  await notifyOwnersOfChange("contact", id, "deleted");
   await deletePolymorphicRefsForEntity({ type: "contact", id });
   const db = await getDb();
   await logDeleted("contact", id, await snapshot("contact", id));

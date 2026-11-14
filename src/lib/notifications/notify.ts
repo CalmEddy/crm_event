@@ -1,9 +1,15 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb, notificationLog, users } from "@/db";
-import { sendResendEmail } from "@/lib/notifications/resend-send";
+import { addressFor, deliver } from "@/lib/notifications/channels";
+import { loadPrefs } from "@/lib/notifications/prefs";
+import { CHANNELS, prefKey, type NotificationKind } from "@/lib/notifications/prefs-shared";
 
-export type NotificationKind = "assignment" | "record_change" | "task_due";
+export type { NotificationKind };
 
+/**
+ * Notify users about something, on every channel each of them has switched on
+ * for this kind. The actor (whoever made the change) is never notified.
+ */
 export async function notifyUsers(options: {
   kind: NotificationKind;
   entityType: string;
@@ -11,6 +17,8 @@ export async function notifyUsers(options: {
   userIds: number[];
   subject: string;
   body: string;
+  /** Link to the record, used for short channels such as SMS. */
+  url?: string | null;
   dedupeKeyPrefix: string;
   actorUserId?: number | null;
 }) {
@@ -24,56 +32,48 @@ export async function notifyUsers(options: {
     .select()
     .from(users)
     .where(and(inArray(users.id, uniqueIds), eq(users.active, true)));
+  const prefs = await loadPrefs(recipients.map((user) => user.id));
 
   let sent = 0;
   let skipped = 0;
 
   for (const user of recipients) {
-    if (!user.email) {
-      skipped += 1;
-      continue;
-    }
+    for (const channel of CHANNELS) {
+      if (!prefs.get(user.id)?.[prefKey(options.kind, channel)]) continue;
+      if (!addressFor(user, channel)) {
+        skipped += 1;
+        continue;
+      }
 
-    const dedupeKey = `${options.dedupeKeyPrefix}:user:${user.id}`;
-    try {
-      await db.insert(notificationLog).values({
-        userId: user.id,
-        kind: options.kind,
-        entityType: options.entityType,
-        entityId: options.entityId,
-        dedupeKey,
-      });
-    } catch {
-      // Unique dedupe_key — already notified for this key.
-      skipped += 1;
-      continue;
-    }
+      // Email keeps the original key format so earlier sends still dedupe.
+      const dedupeKey =
+        `${options.dedupeKeyPrefix}:user:${user.id}` + (channel === "email" ? "" : `:${channel}`);
+      try {
+        await db.insert(notificationLog).values({
+          userId: user.id,
+          kind: options.kind,
+          entityType: options.entityType,
+          entityId: options.entityId,
+          dedupeKey,
+          channel,
+        });
+      } catch {
+        // Unique dedupe_key: already notified for this key.
+        skipped += 1;
+        continue;
+      }
 
-    const result = await sendResendEmail({
-      to: user.email,
-      subject: options.subject,
-      text: options.body,
-    });
-
-    if (!result.ok) {
+      const result = await deliver(channel, user, options);
+      if (result.ok && !result.skipped) {
+        sent += 1;
+        continue;
+      }
       await db
         .update(notificationLog)
-        .set({ error: result.error })
+        .set({ error: result.ok ? result.reason : result.error })
         .where(eq(notificationLog.dedupeKey, dedupeKey));
       skipped += 1;
-      continue;
     }
-
-    if (result.skipped) {
-      await db
-        .update(notificationLog)
-        .set({ error: result.reason })
-        .where(eq(notificationLog.dedupeKey, dedupeKey));
-      skipped += 1;
-      continue;
-    }
-
-    sent += 1;
   }
 
   return { sent, skipped };

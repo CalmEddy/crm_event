@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb, noteLinks, notes, type EntityType } from "@/db";
 import { requireSignedIn } from "@/lib/auth";
+import { notifyNoteAdded } from "@/lib/notifications/record-events";
 import {
   entityHref,
   isEntityType,
@@ -69,6 +70,8 @@ export async function createNoteForEntity(
     })),
   );
 
+  await notifyNoteAdded(note.id, body, targets);
+
   revalidateEntityPaths(targets);
   redirect(entityHref(primary.type, primary.id));
 }
@@ -91,6 +94,8 @@ export async function createStandaloneNote(formData: FormData) {
       entityId: ref.id,
     })),
   );
+
+  await notifyNoteAdded(note.id, body, targets);
 
   revalidateEntityPaths(targets);
   redirect("/notes");

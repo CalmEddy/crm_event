@@ -33,6 +33,7 @@ import {
   taskDeletedMessage,
 } from "@/lib/notifications/messages";
 import { notifyUsers } from "@/lib/notifications/notify";
+import { notifyOwnersAdded, notifyOwnersOfChange } from "@/lib/notifications/record-events";
 
 export class FieldError extends Error {}
 
@@ -180,7 +181,10 @@ async function notifyRecordChange(
   id: number,
   action: "updated" | "deleted",
 ) {
-  if (entity !== "task" && entity !== "event") return;
+  if (entity === "contact" || entity === "organization") {
+    await notifyOwnersOfChange(entity, id, action);
+    return;
+  }
   const db = await getDb();
   const actorUserId = await getCurrentUserId();
   const stamp = Date.now();
@@ -256,7 +260,7 @@ export async function changeAssignees(
   }
 
   if (entity === "contact" || entity === "organization") {
-    // Owners: no emails, just the link and an activity entry.
+    // Owners: the link, an activity entry, and a heads-up to new owners.
     for (const id of ids) {
       const before = new Set(
         (
@@ -285,6 +289,7 @@ export async function changeAssignees(
           .insert(recordOwners)
           .values(added.map((userId) => ({ entity, entityId: id, userId })))
           .onConflictDoNothing();
+        await notifyOwnersAdded(entity, id, added);
       }
     }
     return { cascaded: 0 };

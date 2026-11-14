@@ -8,6 +8,7 @@ import { getDb, organizations } from "@/db";
 import { ORGANIZATION_TYPES, type OrganizationType } from "@/lib/constants";
 import { deletePolymorphicRefsForEntity } from "@/lib/entities";
 import { requireSignedIn } from "@/lib/auth";
+import { notifyOwnersOfChange } from "@/lib/notifications/record-events";
 import { ORGANIZATION_KEYS, readContactInfo } from "@/lib/contact-info";
 
 function readOrgFields(formData: FormData) {
@@ -41,6 +42,7 @@ export async function updateOrganization(id: number, formData: FormData) {
     .set({ ...fields, updatedAt: new Date() })
     .where(eq(organizations.id, id));
   await logUpdated("organization", id, before);
+  await notifyOwnersOfChange("organization", id, "updated");
   revalidatePath("/organizations");
   revalidatePath(`/organizations/${id}`);
   redirect(`/organizations/${id}`);
@@ -48,6 +50,8 @@ export async function updateOrganization(id: number, formData: FormData) {
 
 export async function deleteOrganization(id: number) {
   await requireSignedIn();
+  // Notify before the owner links disappear.
+  await notifyOwnersOfChange("organization", id, "deleted");
   await deletePolymorphicRefsForEntity({ type: "organization", id });
   const db = await getDb();
   await logDeleted("organization", id, await snapshot("organization", id));

@@ -109,6 +109,33 @@ Set:
 
 If Resend outbound env is missing, mutations still succeed and rows are written to `notification_log` with a skip reason (local-friendly).
 
+### Channels and personal preferences
+
+Each staff member chooses what they hear about and where, under **Notifications** in the nav (`/settings/notifications`):
+
+- **What:** tasks coming due, being assigned (or made an owner), changes to items they own or are assigned to, and notes added to those items. Nobody is notified about their own changes.
+- **Where:** email, text message, Telegram, in any combination per kind. With nothing saved, email is on and the others are off.
+- **When:** the daily task reminder can start 0 to 14 days before a due date and keeps listing a task until it is done or skipped.
+
+The page also has a test button per channel, "Send my task reminder now", and a list of the last notifications with the reason any were not sent.
+
+| Variable | Purpose |
+| --- | --- |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | Twilio credentials for text messages |
+| `TWILIO_FROM_NUMBER` | Sending number (`+1...`) or a Messaging Service SID (`MG...`) |
+| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather |
+| `TELEGRAM_WEBHOOK_SECRET` | Only when the bot uses a webhook (below) |
+
+A channel with no env set is skipped with a reason, the same way email is.
+
+**Telegram.** Create a bot with @BotFather and set `TELEGRAM_BOT_TOKEN`. Each person then clicks **Connect Telegram**, opens the link, presses Start in Telegram and clicks **Finish connecting**. That works with no further setup. On a hosted deployment you can instead register a webhook so the connection completes by itself:
+
+```bash
+curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+  -d "url=https://<your-greenroom-host>/api/telegram/webhook" \
+  -d "secret_token=$TELEGRAM_WEBHOOK_SECRET"
+```
+
 ### Due-task digest cron
 
 Call once per day (hosting scheduler / external cron):
@@ -122,7 +149,9 @@ Only the `Authorization: Bearer` header is accepted (no query-string secret).
 
 Open tasks (`todo` / `doing`) with `due_on <= today` are grouped per assignee. One digest per user per calendar day (`dedupe_key` prevents repeats).
 
-Greenroom pages and mutations require a signed-in Cursor viewer. `/api/inbound/email` and `/api/cron/due-tasks` use their own secrets (Svix / `CRON_SECRET`) instead.
+Greenroom pages and mutations require a signed-in Cursor viewer. Each Cursor account is linked to its staff row by the account's stable id (claimed by email on first sign-in), so editing a staff member's name or email keeps the link.
+
+On a local server there is no Cursor sign-in, so `/sign-in` lists the active staff and you choose who you are; **Log out** in the header returns you to that list. The choice is a cookie that is read only for the simulated local viewer, so it has no effect on a published app. `/api/inbound/email`, `/api/cron/due-tasks` and `/api/telegram/webhook` use their own secrets (Svix / `CRON_SECRET` / `TELEGRAM_WEBHOOK_SECRET`) instead.
 
 ## Email event intake (Resend Inbound)
 

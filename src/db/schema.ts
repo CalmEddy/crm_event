@@ -53,6 +53,7 @@ export const notificationKindEnum = pgEnum("notification_kind", [
   "assignment",
   "record_change",
   "task_due",
+  "note_added",
 ]);
 
 export const entityTypeEnum = pgEnum("entity_type", [
@@ -69,6 +70,14 @@ export const users = pgTable(
     name: text("name").notNull(),
     email: text("email").notNull(),
     active: boolean("active").notNull().default(true),
+    /** Stable id of the signed-in account this row belongs to (set on first sign-in). */
+    identitySub: text("identity_sub"),
+    /** E.164 mobile number for text messages. */
+    phone: text("phone"),
+    telegramChatId: text("telegram_chat_id"),
+    /** One-time code the user sends to the bot to connect Telegram. */
+    telegramLinkCode: text("telegram_link_code"),
+    reminderLeadDays: integer("reminder_lead_days").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -76,7 +85,10 @@ export const users = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [uniqueIndex("users_email_idx").on(table.email)],
+  (table) => [
+    uniqueIndex("users_email_idx").on(table.email),
+    uniqueIndex("users_identity_sub_idx").on(table.identitySub),
+  ],
 );
 
 export const eventAssignees = pgTable(
@@ -131,6 +143,7 @@ export const notificationLog = pgTable(
     entityType: text("entity_type").notNull(),
     entityId: integer("entity_id").notNull(),
     dedupeKey: text("dedupe_key").notNull(),
+    channel: text("channel").notNull().default("email"),
     sentAt: timestamp("sent_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -638,6 +651,19 @@ export const recordOwners = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
   },
   (table) => [primaryKey({ columns: [table.entity, table.entityId, table.userId] })],
+);
+
+export const notificationPrefs = pgTable(
+  "notification_prefs",
+  {
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    channel: text("channel").notNull(),
+    enabled: boolean("enabled").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.kind, table.channel] })],
 );
 
 export type Organization = typeof organizations.$inferSelect;

@@ -3,6 +3,7 @@ import { Fraunces, Manrope } from "next/font/google";
 import { headers } from "next/headers";
 import { CommandPalette } from "@/components/command-palette";
 import { Nav } from "@/components/nav";
+import { getViewer } from "@/lib/auth";
 import { getIdentity } from "../../cursor/identity";
 import "./globals.css";
 
@@ -25,6 +26,8 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const identity = await getIdentity(await headers());
   const signedIn = identity.verified;
+  // Locally a viewer exists before anyone has chosen a staff member on /sign-in.
+  const hasViewer = signedIn && (await getViewer()) !== null;
 
   return (
     <html
@@ -32,7 +35,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${display.variable} ${body.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {signedIn ? <Nav /> : null}
+        {hasViewer ? <Nav /> : null}
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
           {signedIn ? (
             children
@@ -48,7 +51,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             </div>
           )}
         </main>
-        {signedIn ? <CommandPalette /> : null}
+        {hasViewer ? <CommandPalette /> : null}
       </body>
     </html>
   );
