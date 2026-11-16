@@ -1,6 +1,7 @@
 import { count, eq } from "drizzle-orm";
 import { addDays, setHours, setMinutes } from "date-fns";
 import {
+  automations,
   contacts,
   eventAssignees,
   eventContacts,
@@ -16,13 +17,61 @@ import {
 } from "@/db";
 import { dueOnFromEventDate } from "@/lib/offsets";
 
+async function ensureExampleAutomation() {
+  const db = await getDb({ system: true });
+  try {
+    const [{ value: automationCount }] = await db
+      .select({ value: count() })
+      .from(automations);
+    if (automationCount > 0) return;
+
+    const [group] = await db
+      .select()
+      .from(taskGroups)
+      .where(eq(taskGroups.name, "Standard booking"))
+      .limit(1);
+    if (!group) return;
+
+    await db.insert(automations).values({
+      name: "Apply booking pack when booked",
+      description:
+        "When an event status changes to booked, apply the Standard booking task group (add missing templates only).",
+      enabled: true,
+      entity: "event",
+      trigger: {
+        type: "field_changed",
+        entity: "event",
+        field: "status",
+        to: "booked",
+      },
+      conditions: [],
+      actions: [
+        {
+          type: "apply_task_group",
+          taskGroupId: group.id,
+          mode: "add_missing",
+        },
+      ],
+    });
+  } catch (error) {
+    // Table may be missing until migrations catch up (e.g. hosted Postgres).
+    console.warn(
+      "[seed] skipped example automation:",
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
+
 export async function ensureSeedData() {
   const db = await getDb({ system: true });
   const [{ value: orgCount }] = await db
     .select({ value: count() })
     .from(organizations);
 
-  if (orgCount > 0) return { seeded: false as const };
+  if (orgCount > 0) {
+    await ensureExampleAutomation();
+    return { seeded: false as const };
+  }
 
   const [club] = await db
     .insert(organizations)
@@ -219,6 +268,28 @@ export async function ensureSeedData() {
       { taskId: task.id, userId: travelStaff.id },
     ]),
   );
+
+  await db.insert(automations).values({
+    name: "Apply booking pack when booked",
+    description:
+      "When an event status changes to booked, apply the Standard booking task group (add missing templates only).",
+    enabled: true,
+    entity: "event",
+    trigger: {
+      type: "field_changed",
+      entity: "event",
+      field: "status",
+      to: "booked",
+    },
+    conditions: [],
+    actions: [
+      {
+        type: "apply_task_group",
+        taskGroupId: group.id,
+        mode: "add_missing",
+      },
+    ],
+  });
 
   return { seeded: true as const, eventId: event.id };
 }

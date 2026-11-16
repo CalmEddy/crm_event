@@ -21,6 +21,8 @@ declare global {
   var __crmPool: Pool | undefined;
   // eslint-disable-next-line no-var
   var __crmPglite: PGlite | undefined;
+  // eslint-disable-next-line no-var
+  var __crmMigrateLock: Promise<void> | undefined;
 }
 
 /** Split migration SQL into single statements (poolers often reject multi-statement queries). */
@@ -74,22 +76,97 @@ async function applySqlMigrations(options: {
   }
 }
 
-async function createPostgresDb(): Promise<AppDb> {
-  // Prefer a direct (unpooled) URL for DDL when the platform provides one.
-  const migrationPool = new Pool({
-    connectionString: migrateUrl,
-    max: 1,
-  });
-  try {
-    await applySqlMigrations({
-      exec: async (sql) => {
-        await migrationPool.query(sql);
-      },
-      query: (sql, params) => migrationPool.query(sql, params),
+async function applyMigrationsToLiveDb() {
+  if (databaseUrl !== "") {
+    const migrationPool = new Pool({
+      connectionString: migrateUrl,
+      max: 1,
     });
-  } finally {
-    await migrationPool.end();
+    try {
+      await applySqlMigrations({
+        exec: async (sql) => {
+          await migrationPool.query(sql);
+        },
+        query: (sql, params) => migrationPool.query(sql, params),
+      });
+    } finally {
+      await migrationPool.end();
+    }
+    return;
   }
+
+  const client = globalThis.__crmPglite;
+  if (!client) return;
+  await applySqlMigrations({
+    exec: async (sql) => {
+      await client.exec(sql);
+    },
+    query: async (sql, params = []) => {
+      const result = await client.query(sql, params);
+      return { rows: (result.rows ?? []) as Record<string, unknown>[] };
+    },
+  });
+}
+
+/**
+ * Idempotent DDL so automations work even if an earlier migration was recorded
+ * without creating the tables (e.g. reserved-word failure on Postgres).
+ */
+async function ensureAutomationsTables(exec: (sql: string) => Promise<unknown>) {
+  const sql = await readFile(
+    path.join(process.cwd(), "migrations", "014_automations_ensure.sql"),
+    "utf8",
+  ).catch(() => null);
+  if (!sql) return;
+  for (const statement of splitSqlStatements(sql)) {
+    try {
+      await exec(statement);
+    } catch {
+      // ALTER TYPE / CREATE IF NOT EXISTS may no-op or race; ignore.
+    }
+  }
+}
+
+async function ensureAutomationsOnLiveDb() {
+  if (databaseUrl !== "") {
+    const migrationPool = new Pool({
+      connectionString: migrateUrl,
+      max: 1,
+    });
+    try {
+      await ensureAutomationsTables(async (sql) => {
+        await migrationPool.query(sql);
+      });
+    } finally {
+      await migrationPool.end();
+    }
+    return;
+  }
+  const client = globalThis.__crmPglite;
+  if (!client) return;
+  await ensureAutomationsTables(async (sql) => {
+    await client.exec(sql);
+  });
+}
+
+/** Apply any new migration files even if the DB client was opened earlier in this process. */
+async function ensureMigrationsApplied() {
+  const prior = globalThis.__crmMigrateLock ?? Promise.resolve();
+  let release!: () => void;
+  globalThis.__crmMigrateLock = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await prior;
+  try {
+    await applyMigrationsToLiveDb();
+    await ensureAutomationsOnLiveDb();
+  } finally {
+    release();
+  }
+}
+
+async function createPostgresDb(): Promise<AppDb> {
+  await applyMigrationsToLiveDb();
 
   globalThis.__crmPool ??= new Pool({
     connectionString: databaseUrl,
@@ -103,15 +180,7 @@ async function createPgliteDb(): Promise<AppDb> {
   await mkdir(dataDir, { recursive: true });
   globalThis.__crmPglite ??= new PGlite(dataDir);
   const client = globalThis.__crmPglite;
-  await applySqlMigrations({
-    exec: async (sql) => {
-      await client.exec(sql);
-    },
-    query: async (sql, params = []) => {
-      const result = await client.query(sql, params);
-      return { rows: (result.rows ?? []) as Record<string, unknown>[] };
-    },
-  });
+  await applyMigrationsToLiveDb();
   return drizzlePglite(client, { schema });
 }
 
@@ -125,8 +194,13 @@ export type GetDbOptions = {
 
 export async function getDb(options?: GetDbOptions): Promise<AppDb> {
   if (!options?.system) {
-    const { requireSignedIn } = await import("@/lib/auth");
-    await requireSignedIn();
+    // Automations (including cron) run nested helpers that call getDb() without
+    // a browser session — allow them once the runner has entered its context.
+    const { isInsideAutomation } = await import("@/lib/automations/context");
+    if (!isInsideAutomation()) {
+      const { requireSignedIn } = await import("@/lib/auth");
+      await requireSignedIn();
+    }
   }
   if (!globalThis.__crmDbPromise) {
     globalThis.__crmDbPromise = (
@@ -136,7 +210,10 @@ export async function getDb(options?: GetDbOptions): Promise<AppDb> {
       throw error;
     });
   }
-  return globalThis.__crmDbPromise;
+  const db = await globalThis.__crmDbPromise;
+  // Hot reload can add migration files after the first connection; apply them.
+  await ensureMigrationsApplied();
+  return db;
 }
 
 export * from "./schema";

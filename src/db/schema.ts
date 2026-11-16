@@ -3,6 +3,7 @@ import {
   boolean,
   date,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -54,6 +55,7 @@ export const notificationKindEnum = pgEnum("notification_kind", [
   "record_change",
   "task_due",
   "note_added",
+  "automation",
 ]);
 
 export const entityTypeEnum = pgEnum("entity_type", [
@@ -666,6 +668,89 @@ export const notificationPrefs = pgTable(
   (table) => [primaryKey({ columns: [table.userId, table.kind, table.channel] })],
 );
 
+/** Team-wide if/then rules. Trigger, conditions, and actions are JSON (see src/lib/automations). */
+export const automations = pgTable("automations", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  enabled: boolean("enabled").notNull().default(true),
+  /** Lower runs first. */
+  priority: integer("priority").notNull().default(100),
+  /** Queue actions for human approval instead of running immediately. */
+  requireApproval: boolean("require_approval").notNull().default(false),
+  /** Max successful runs per rolling hour; null = unlimited. */
+  rateLimitPerHour: integer("rate_limit_per_hour"),
+  /** IANA timezone for schedule triggers, or "local". */
+  timezone: text("timezone").notNull().default("local"),
+  /** Primary entity for record triggers; null when the trigger carries its own entity. */
+  entity: entityTypeEnum("entity"),
+  /** Quoted column — TRIGGER is reserved in Postgres. */
+  trigger: jsonb("trigger").notNull(),
+  conditions: jsonb("conditions").notNull().default([]),
+  actions: jsonb("actions").notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const automationRuns = pgTable("automation_runs", {
+  id: serial("id").primaryKey(),
+  automationId: integer("automation_id")
+    .notNull()
+    .references(() => automations.id, { onDelete: "cascade" }),
+  /** ok | skipped | error | dry_run | pending_approval */
+  status: text("status").notNull(),
+  triggerEntity: entityTypeEnum("trigger_entity"),
+  triggerRecordId: integer("trigger_record_id"),
+  detail: text("detail").notNull().default(""),
+  error: text("error"),
+  skipReason: text("skip_reason"),
+  dryRun: boolean("dry_run").notNull().default(false),
+  startedAt: timestamp("started_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+});
+
+/** Prevents repeat schedule / date-offset fires for the same key. */
+export const automationFireLog = pgTable(
+  "automation_fire_log",
+  {
+    automationId: integer("automation_id")
+      .notNull()
+      .references(() => automations.id, { onDelete: "cascade" }),
+    fireKey: text("fire_key").notNull(),
+    firedAt: timestamp("fired_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.automationId, table.fireKey] })],
+);
+
+/** Human-gated automation runs. */
+export const automationApprovals = pgTable("automation_approvals", {
+  id: serial("id").primaryKey(),
+  automationId: integer("automation_id")
+    .notNull()
+    .references(() => automations.id, { onDelete: "cascade" }),
+  triggerEntity: entityTypeEnum("trigger_entity").notNull(),
+  triggerRecordId: integer("trigger_record_id").notNull(),
+  actions: jsonb("actions").notNull().default([]),
+  /** pending | approved | rejected */
+  status: text("status").notNull().default("pending"),
+  detail: text("detail").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolvedBy: integer("resolved_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+});
+
 export type Organization = typeof organizations.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Event = typeof events.$inferSelect;
@@ -685,3 +770,6 @@ export type ActivityEntry = typeof activityLog.$inferSelect;
 export type CustomField = typeof customFields.$inferSelect;
 export type Tag = typeof tags.$inferSelect;
 export type SavedView = typeof savedViews.$inferSelect;
+export type Automation = typeof automations.$inferSelect;
+export type AutomationRun = typeof automationRuns.$inferSelect;
+export type AutomationApproval = typeof automationApprovals.$inferSelect;

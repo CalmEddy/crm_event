@@ -142,15 +142,31 @@ export async function writeCustomValues(
       changes.push(`${fields.get(fieldId)?.label ?? "Field"}: ${old ?? "—"} → ${value ?? "—"}`);
     }
     if (changes.length) {
+      const row = await snapshot(entity, id);
       await logActivity([
         {
           entity,
           entityId: id,
           action: "updated",
-          label: titleOf(entity, await snapshot(entity, id)),
+          label: titleOf(entity, row),
           detail: changes.join("; "),
         },
       ]);
+      const { shouldSuppressAutomationDispatch } = await import(
+        "@/lib/automations/context"
+      );
+      if (shouldSuppressAutomationDispatch()) continue;
+      // Fire automations for custom-field changes (standard logUpdated does not see cf_*).
+      const beforeCustom = before.get(id) ?? {};
+      const afterCustom = (await loadCustomValues(entity, [id])).get(id) ?? {};
+      const { onRecordMutation } = await import("@/lib/automations/dispatch");
+      await onRecordMutation({
+        entity,
+        id,
+        kind: "updated",
+        before: { ...(row as Record<string, unknown> | null), ...beforeCustom },
+        after: { ...(row as Record<string, unknown> | null), ...afterCustom },
+      });
     }
   }
 }

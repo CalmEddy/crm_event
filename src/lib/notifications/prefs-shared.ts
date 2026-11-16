@@ -30,6 +30,11 @@ export const KINDS = [
     label: "Notes on my items",
     description: "Someone else adds a note to a record you own or are assigned to.",
   },
+  {
+    kind: "automation",
+    label: "Automation messages",
+    description: "A team automation sends you a notification (for example a status reminder or checklist alert).",
+  },
 ] as const;
 
 export type NotificationKind = (typeof KINDS)[number]["kind"];

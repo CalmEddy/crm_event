@@ -88,11 +88,20 @@ export function titleOf(entity: EntityType, row: Snapshot) {
 }
 
 export async function logCreated(entity: EntityType, id: number) {
-  await logActivity([{ entity, entityId: id, action: "created", label: titleOf(entity, await snapshot(entity, id)) }]);
+  const after = await snapshot(entity, id);
+  await logActivity([{ entity, entityId: id, action: "created", label: titleOf(entity, after) }]);
+  const { shouldSuppressAutomationDispatch } = await import("@/lib/automations/context");
+  if (shouldSuppressAutomationDispatch()) return;
+  const { onRecordMutation } = await import("@/lib/automations/dispatch");
+  await onRecordMutation({ entity, id, kind: "created", before: null, after });
 }
 
 export async function logDeleted(entity: EntityType, id: number, before: Snapshot) {
   await logActivity([{ entity, entityId: id, action: "deleted", label: titleOf(entity, before) }]);
+  const { shouldSuppressAutomationDispatch } = await import("@/lib/automations/context");
+  if (shouldSuppressAutomationDispatch()) return;
+  const { onRecordMutation } = await import("@/lib/automations/dispatch");
+  await onRecordMutation({ entity, id, kind: "deleted", before, after: null });
 }
 
 /** Re-read the record and log the fields that differ from `before`. */
@@ -113,6 +122,10 @@ export async function logUpdated(entity: EntityType, id: number, before: Snapsho
   await logActivity([
     { entity, entityId: id, action: "updated", label: titleOf(entity, after), detail: changes.join("; ") },
   ]);
+  const { shouldSuppressAutomationDispatch } = await import("@/lib/automations/context");
+  if (shouldSuppressAutomationDispatch()) return;
+  const { onRecordMutation } = await import("@/lib/automations/dispatch");
+  await onRecordMutation({ entity, id, kind: "updated", before, after });
 }
 
 export type ActivityItem = {

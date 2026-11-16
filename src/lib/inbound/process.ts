@@ -1,17 +1,15 @@
 import { addDays, setHours, setMinutes, setSeconds, setMilliseconds } from "date-fns";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   contacts,
   eventContacts,
   events,
   getDb,
   inboundEmails,
-  taskGroupApplications,
-  tasks,
-  taskTemplates,
 } from "@/db";
-import { dueOnFromEventDate } from "@/lib/offsets";
+import { onRecordMutation } from "@/lib/automations/dispatch";
 import { htmlOrTextToBody, parseInboundBody } from "@/lib/inbound/parse";
+import { applyTaskGroupToEventCore } from "@/lib/task-groups-apply";
 
 export type ProcessInboundInput = {
   providerMessageId: string;
@@ -35,43 +33,16 @@ function placeholderStartsAt(now = new Date()) {
   return setMilliseconds(setSeconds(setMinutes(setHours(day, 12), 0), 0), 0);
 }
 
-async function maybeApplyDefaultTaskGroup(eventId: number, startsAt: Date) {
+async function maybeApplyDefaultTaskGroup(eventId: number) {
   const raw = process.env.INBOUND_DEFAULT_TASK_GROUP_ID?.trim() ?? "";
   if (!raw) return;
   const taskGroupId = Number(raw);
   if (!Number.isFinite(taskGroupId) || taskGroupId <= 0) return;
-
-  const db = await getDb({ system: true });
-  const templates = await db
-    .select()
-    .from(taskTemplates)
-    .where(eq(taskTemplates.taskGroupId, taskGroupId))
-    .orderBy(asc(taskTemplates.sortOrder), asc(taskTemplates.id));
-  if (templates.length === 0) return;
-
-  const [existingApplication] = await db
-    .select()
-    .from(taskGroupApplications)
-    .where(
-      and(
-        eq(taskGroupApplications.eventId, eventId),
-        eq(taskGroupApplications.taskGroupId, taskGroupId),
-      ),
-    );
-  if (existingApplication) return;
-
-  await db.insert(tasks).values(
-    templates.map((template) => ({
-      title: template.title,
-      kind: template.kind,
-      dueOn: dueOnFromEventDate(startsAt, template.offsetDays),
-      status: "todo" as const,
-      eventId,
-      taskGroupId,
-      taskTemplateId: template.id,
-    })),
-  );
-  await db.insert(taskGroupApplications).values({ eventId, taskGroupId });
+  try {
+    await applyTaskGroupToEventCore(eventId, taskGroupId, "add_missing");
+  } catch {
+    // Optional auto-apply must not fail the intake.
+  }
 }
 
 export async function processInboundEmail(
@@ -187,10 +158,18 @@ export async function processInboundEmail(
     role: "buyer",
   });
 
+  await maybeApplyDefaultTaskGroup(event.id);
+
   try {
-    await maybeApplyDefaultTaskGroup(event.id, startsAt);
+    await onRecordMutation({
+      entity: "event",
+      id: event.id,
+      kind: "created",
+      before: null,
+      after: event as unknown as Record<string, unknown>,
+    });
   } catch {
-    // Optional auto-apply must not fail the intake.
+    // Automations must not fail the intake.
   }
 
   try {

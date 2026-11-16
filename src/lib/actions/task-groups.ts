@@ -6,12 +6,10 @@ import { redirect } from "next/navigation";
 import {
   events,
   getDb,
-  taskGroupApplications,
   taskGroups,
   tasks,
   taskTemplates,
 } from "@/db";
-import { copyEventAssigneesToTasks } from "@/lib/assignees";
 import { TASK_KINDS, type TaskKind } from "@/lib/constants";
 import { requireSignedIn } from "@/lib/auth";
 import {
@@ -20,6 +18,7 @@ import {
   type OffsetDirection,
   type OffsetUnit,
 } from "@/lib/offsets";
+import { applyTaskGroupToEventCore } from "@/lib/task-groups-apply";
 
 function readGroupFields(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
@@ -99,7 +98,6 @@ export async function addTaskTemplate(groupId: number, formData: FormData) {
     ...fields,
     sortOrder,
   });
-
   revalidatePath(`/task-groups/${groupId}`);
   redirect(`/task-groups/${groupId}`);
 }
@@ -146,79 +144,11 @@ export async function applyTaskGroupToEvent(eventId: number, formData: FormData)
   const mode = String(formData.get("mode") ?? "block");
   if (!Number.isFinite(taskGroupId)) throw new Error("Pick a task group");
 
-  const db = await getDb();
-  const [event] = await db.select().from(events).where(eq(events.id, eventId));
-  if (!event) throw new Error("Event not found");
-
-  const templates = await db
-    .select()
-    .from(taskTemplates)
-    .where(eq(taskTemplates.taskGroupId, taskGroupId))
-    .orderBy(asc(taskTemplates.sortOrder), asc(taskTemplates.id));
-
-  if (templates.length === 0) {
-    throw new Error("Task group has no templates");
-  }
-
-  const [existingApplication] = await db
-    .select()
-    .from(taskGroupApplications)
-    .where(
-      and(
-        eq(taskGroupApplications.eventId, eventId),
-        eq(taskGroupApplications.taskGroupId, taskGroupId),
-      ),
-    );
-
-  if (existingApplication && mode !== "add_missing") {
-    throw new Error(
-      'This task group was already applied. Choose "add missing only" to spawn templates that are not yet linked.',
-    );
-  }
-
-  const existingTasks = await db
-    .select()
-    .from(tasks)
-    .where(
-      and(eq(tasks.eventId, eventId), eq(tasks.taskGroupId, taskGroupId)),
-    );
-  const spawnedTemplateIds = new Set(
-    existingTasks
-      .map((task) => task.taskTemplateId)
-      .filter((id): id is number => id != null),
+  await applyTaskGroupToEventCore(
+    eventId,
+    taskGroupId,
+    mode === "add_missing" ? "add_missing" : "block",
   );
-
-  const toCreate = templates.filter(
-    (template) => !spawnedTemplateIds.has(template.id),
-  );
-
-  if (toCreate.length > 0) {
-    const created = await db
-      .insert(tasks)
-      .values(
-        toCreate.map((template) => ({
-          title: template.title,
-          kind: template.kind,
-          dueOn: dueOnFromEventDate(event.startsAt, template.offsetDays),
-          status: "todo" as const,
-          eventId,
-          taskGroupId,
-          taskTemplateId: template.id,
-        })),
-      )
-      .returning();
-    await copyEventAssigneesToTasks(
-      eventId,
-      created.map((task) => task.id),
-    );
-  }
-
-  if (!existingApplication) {
-    await db.insert(taskGroupApplications).values({
-      eventId,
-      taskGroupId,
-    });
-  }
 
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/tasks");

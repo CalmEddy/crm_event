@@ -14,6 +14,7 @@ const links = [
   { href: "/users", label: "Users" },
   { href: "/settings/tags", label: "Tags" },
   { href: "/settings/fields", label: "Fields" },
+  { href: "/settings/automations", label: "Automations" },
   { href: "/settings/notifications", label: "Notifications" },
 ];
 

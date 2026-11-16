@@ -51,6 +51,12 @@ export function entityHref(type: EntityType, id: number) {
   }
 }
 
+/** Safe href when entity/id may be null or untyped (e.g. automation run rows). */
+export function recordHref(entity: string | null, id: number | null) {
+  if (!entity || !id || !isEntityType(entity)) return null;
+  return entityHref(entity, id);
+}
+
 export function entityTypeLabel(type: EntityType) {
   return labelize(type);
 }
