@@ -5,6 +5,7 @@ import { getViewer, resolveStaffUser } from "@/lib/auth";
 const links = [
   { href: "/", label: "Dashboard" },
   { href: "/events", label: "Events" },
+  { href: "/calendar", label: "Calendar" },
   { href: "/inbound", label: "Inbound" },
   { href: "/contacts", label: "Contacts" },
   { href: "/organizations", label: "Organizations" },
@@ -16,6 +17,7 @@ const links = [
   { href: "/settings/fields", label: "Fields" },
   { href: "/settings/automations", label: "Automations" },
   { href: "/settings/notifications", label: "Notifications" },
+  { href: "/settings/calendar", label: "Calendar sync" },
 ];
 
 export async function Nav() {

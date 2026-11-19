@@ -314,6 +314,13 @@ export async function changeAssignees(
           .onConflictDoNothing();
         await notifyAssigned("event", eventId, added);
       }
+      const { syncRecordToGoogleCalendars } = await import("@/lib/google/sync");
+      void syncRecordToGoogleCalendars({
+        entity: "event",
+        id: eventId,
+        kind: "updated",
+        extraUserIds: [...added, ...remove],
+      }).catch(() => undefined);
     }
     if (change.cascadeToTasks) {
       taskIds = (
@@ -342,6 +349,13 @@ export async function changeAssignees(
         .onConflictDoNothing();
       await notifyAssigned("task", taskId, added);
     }
+    const { syncRecordToGoogleCalendars } = await import("@/lib/google/sync");
+    void syncRecordToGoogleCalendars({
+      entity: "task",
+      id: taskId,
+      kind: "updated",
+      extraUserIds: [...added, ...remove],
+    }).catch(() => undefined);
   }
   return { cascaded };
 }

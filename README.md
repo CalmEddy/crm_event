@@ -88,12 +88,14 @@ Published Cursor apps that declare a database get `DATABASE_URL` injected automa
 
 - **Dashboard** — upcoming events, overdue / due-soon tasks
 - **Events** — list + detail (links, tasks, apply task group, recalculate)
+- **Calendar** — month view of tasks (due date) and events (start); filter by type or “assigned to me”
 - **Inbound** — recent Resend contact-form intakes and parse failures (links to created events)
 - **Contacts / Organizations** — list + detail
-- **Tasks** — filterable list
+- **Tasks** — filterable list (includes a Calendar view) and Google sync for assignees
 - **Task groups** — editor with friendly offset controls
 - **Automations** — team-wide if/then rules (field changes, schedules, date offsets) that update records, apply task groups, assign staff, tag, note, or notify
 - **Users** — staff directory; the signed-in Cursor account is linked to a staff row by email
+
 
 ## Staff notifications (Resend outbound)
 
@@ -161,9 +163,26 @@ curl -X POST "https://<your-greenroom-host>/api/cron/automations" \
 
 Record create/update/delete triggers run inline when staff mutate data (forms, board edits, inbound).
 
+### Google Calendar sync
+
+Staff can connect Google under **Calendar sync** (`/settings/calendar`). Assigned open tasks are pushed as all-day Google events on the due date; assigned events are pushed as timed events (2-hour default length). Updates and unassignments remove or refresh the Google copies. Optional hourly catch-up:
+
+```bash
+curl -X POST "https://<your-greenroom-host>/api/cron/google-calendar" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+| Variable | Purpose |
+| --- | --- |
+| `GOOGLE_CLIENT_ID` | OAuth client id |
+| `GOOGLE_CLIENT_SECRET` | OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | Optional; defaults to `$APP_BASE_URL/api/google/oauth/callback` |
+
+Register that redirect URI in Google Cloud Console. Scope used: `calendar.events`.
+
 Greenroom pages and mutations require a signed-in Cursor viewer. Each Cursor account is linked to its staff row by the account's stable id (claimed by email on first sign-in), so editing a staff member's name or email keeps the link.
 
-On a local server there is no Cursor sign-in, so `/sign-in` lists the active staff and you choose who you are; **Log out** in the header returns you to that list. The choice is a cookie that is read only for the simulated local viewer, so it has no effect on a published app. `/api/inbound/email`, `/api/cron/due-tasks`, `/api/cron/automations` and `/api/telegram/webhook` use their own secrets (Svix / `CRON_SECRET` / `TELEGRAM_WEBHOOK_SECRET`) instead.
+On a local server there is no Cursor sign-in, so `/sign-in` lists the active staff and you choose who you are; **Log out** in the header returns you to that list. The choice is a cookie that is read only for the simulated local viewer, so it has no effect on a published app. `/api/inbound/email`, `/api/cron/due-tasks`, `/api/cron/automations`, `/api/cron/google-calendar` and `/api/telegram/webhook` use their own secrets (Svix / `CRON_SECRET` / `TELEGRAM_WEBHOOK_SECRET`) instead.
 
 ## Email event intake (Resend Inbound)
 

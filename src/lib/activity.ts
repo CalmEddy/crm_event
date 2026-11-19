@@ -94,6 +94,8 @@ export async function logCreated(entity: EntityType, id: number) {
   if (shouldSuppressAutomationDispatch()) return;
   const { onRecordMutation } = await import("@/lib/automations/dispatch");
   await onRecordMutation({ entity, id, kind: "created", before: null, after });
+  const { queueGoogleCalendarSync } = await import("@/lib/google/sync");
+  queueGoogleCalendarSync(entity, id, "created");
 }
 
 export async function logDeleted(entity: EntityType, id: number, before: Snapshot) {
@@ -102,6 +104,8 @@ export async function logDeleted(entity: EntityType, id: number, before: Snapsho
   if (shouldSuppressAutomationDispatch()) return;
   const { onRecordMutation } = await import("@/lib/automations/dispatch");
   await onRecordMutation({ entity, id, kind: "deleted", before, after: null });
+  const { queueGoogleCalendarSync } = await import("@/lib/google/sync");
+  queueGoogleCalendarSync(entity, id, "deleted");
 }
 
 /** Re-read the record and log the fields that differ from `before`. */
@@ -126,6 +130,8 @@ export async function logUpdated(entity: EntityType, id: number, before: Snapsho
   if (shouldSuppressAutomationDispatch()) return;
   const { onRecordMutation } = await import("@/lib/automations/dispatch");
   await onRecordMutation({ entity, id, kind: "updated", before, after });
+  const { queueGoogleCalendarSync } = await import("@/lib/google/sync");
+  queueGoogleCalendarSync(entity, id, "updated");
 }
 
 export type ActivityItem = {

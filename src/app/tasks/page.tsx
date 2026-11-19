@@ -11,7 +11,14 @@ export default async function TasksPage() {
       <PageHeader
         title="Tasks"
         description="Everything to do, by event, assignee, and due date."
-        actions={<ButtonLink href="/tasks/new">Add task</ButtonLink>}
+        actions={
+          <>
+            <ButtonLink href="/calendar?events=0" variant="secondary">
+              Calendar
+            </ButtonLink>
+            <ButtonLink href="/tasks/new">Add task</ButtonLink>
+          </>
+        }
       />
       <EntityDataView entity="task" />
     </div>

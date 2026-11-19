@@ -11,7 +11,14 @@ export default async function EventsPage() {
       <PageHeader
         title="Events"
         description="Shows and bookings with linked people, orgs, and tasks."
-        actions={<ButtonLink href="/events/new">Add event</ButtonLink>}
+        actions={
+          <>
+            <ButtonLink href="/calendar?tasks=0" variant="secondary">
+              Calendar
+            </ButtonLink>
+            <ButtonLink href="/events/new">Add event</ButtonLink>
+          </>
+        }
       />
       <EntityDataView entity="event" />
     </div>

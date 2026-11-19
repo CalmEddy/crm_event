@@ -773,3 +773,48 @@ export type SavedView = typeof savedViews.$inferSelect;
 export type Automation = typeof automations.$inferSelect;
 export type AutomationRun = typeof automationRuns.$inferSelect;
 export type AutomationApproval = typeof automationApprovals.$inferSelect;
+
+/** Per-staff Google Calendar OAuth connection. */
+export const googleCalendarAccounts = pgTable("google_calendar_accounts", {
+  userId: integer("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  googleEmail: text("google_email"),
+  refreshToken: text("refresh_token").notNull(),
+  accessToken: text("access_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", {
+    withTimezone: true,
+  }),
+  calendarId: text("calendar_id").notNull().default("primary"),
+  syncTasks: boolean("sync_tasks").notNull().default(true),
+  syncEvents: boolean("sync_events").notNull().default(true),
+  enabled: boolean("enabled").notNull().default(true),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Maps a CRM task/event to a Google Calendar event for one user. */
+export const googleCalendarLinks = pgTable(
+  "google_calendar_links",
+  {
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    entity: entityTypeEnum("entity").notNull(),
+    entityId: integer("entity_id").notNull(),
+    googleEventId: text("google_event_id").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.entity, table.entityId] })],
+);
+
+export type GoogleCalendarAccount = typeof googleCalendarAccounts.$inferSelect;
+export type GoogleCalendarLink = typeof googleCalendarLinks.$inferSelect;
